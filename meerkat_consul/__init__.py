@@ -31,6 +31,10 @@ def root():
     return '{"name":"meerkat_consul"}'
 
 if __name__ == '__main__':
-    from meerkat_consul.export import locations
-    locations()
+    from meerkat_consul.export import ExportFormFields
+    ExportFormFields().get()
+    ExportFormFields().get()
+
+    pass
+
     # app.run(host="0.0.0.0")
