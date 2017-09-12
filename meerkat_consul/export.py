@@ -6,7 +6,7 @@ from flask_restful import abort, Resource
 
 from meerkat_consul import app, dhis2_config, logger, api_url
 from meerkat_consul.config import COUNTRY_LOCATION_ID, headers
-from meerkat_consul.decorators import get, post
+from meerkat_consul.decorators import get, post, put
 from meerkat_consul.dhis2 import NewIdsProvider
 
 __codes_to_ids = {}
@@ -90,6 +90,105 @@ class ExportLocationTree(Resource):
         logger.info("Created location %s with response %d", name, response.status_code)
         logger.info(response.text)
         return uid
+
+
+class ExportFormFields(Resource):
+    dhis2_code_to_ids = {}
+
+    def get(self):
+        print(str(datetime.now().time()) + " Start!")
+        dhis2_data_elements_res = get("{}dataElements?paging=False".format(dhis2_api_url), headers=dhis2_headers)
+        dhis2_data_elements = dhis2_data_elements_res.json()['dataElements']
+        for d in dhis2_data_elements:
+            data_element_id = d["id"]
+            if data_element_id not in ExportFormFields.dhis2_code_to_ids:
+                data_element = get("{}dataElements/{}".format(dhis2_api_url, data_element_id),
+                                   headers=dhis2_headers).json()
+                ExportFormFields.dhis2_code_to_ids[data_element_id] = data_element.get('code')
+
+        dhis2_codes_lookup = set(ExportFormFields.dhis2_code_to_ids.values())
+        forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
+        for form_name, field_names in forms.items():
+            for field_name in field_names:
+                if not field_name in dhis2_codes_lookup:
+                    id = self.__update_data_elements(field_name)
+                    ExportFormFields.dhis2_code_to_ids[id] = (field_name)
+
+            rv = get("{}programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+            programs = rv.json().get('programs', [])
+            program_payload = {
+                'name': form_name,
+                'shortName': form_name,
+                'programType': 'WITHOUT_REGISTRATION'
+            }
+            if programs:
+                # Update organisations
+                program_id = programs[0]["id"]
+                req = get("{}programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
+                old_organisation_ids = req.json().get('organisationUnits', [])
+
+                organisations = list(set(old_organisation_ids) | set(self.__get_all_operational_clinics()))
+                program_payload["organisationUnits"] = [{"id": x} for x in organisations]
+                payload_json = json.dumps(program_payload)
+                # TODO: IDSchemes doesn't seem to work here
+                req = put("{}programs{}?orgUnitIdScheme=CODE".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
+                logger.info("Updated program %s with status %d", program_id, req.status_code)
+            else:
+                program_id = dhis2_ids.pop()
+                old_organisation_ids = []
+
+                organisations = list(set(old_organisation_ids) | set(self.__get_all_operational_clinics()))
+                program_payload["organisationUnits"] = [{"id": x} for x in organisations]
+                payload_json = json.dumps(program_payload)
+                # TODO: IDSchemes doesn't seem to work here
+                req = post("{}programs?orgUnitIdScheme=CODE".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
+                logger.info("Updated program %s with status %d", program_id, req.status_code)
+            # Update data elements
+            data_element_keys = [{"dataElement": {"code": code}} for code in field_names]
+            stage_payload = {
+                "name": form_name,
+                "code": form_name,
+                "program": {
+                    "code": form_name
+                },
+                "programStageDataElements": data_element_keys
+            }
+            json_stage_payload = json.dumps(stage_payload)
+            res = post("{}programStages?orgUnitIdScheme=CODE&programIdScheme=CODE&dataElementIdScheme=CODE".format(api_url), data=json_stage_payload, headers=headers)
+            logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+
+        print(str(datetime.now().time()) + " DONE!")
+
+    @staticmethod
+    def __get_all_operational_clinics():
+        locations = requests.get("{}/locations".format(api_url), headers=headers).json()
+        for location in locations.values():
+            if location.get('case_report') != 0 and location.get('level') == 'clinic':
+                yield location.get('country_location_id')
+
+    @staticmethod
+    def __update_data_elements(key):
+        id = dhis2_ids.pop()
+        json_payload = json.dumps({
+            'id': id,
+            'name': key,
+            'shortName': key,
+            'code': key,
+            'domainType': 'TRACKER',
+            'valueType': 'TEXT',
+            'aggregationType': 'NONE'
+        })
+        post_res = post("{}dataElements".format(dhis2_api_url), data=json_payload, headers=dhis2_headers)
+        json_res = post_res.json()
+        logger.info("Created data element \"{}\"".format(key))
+        return id
+
+
+# class ExportProgram(Resource):
+#
+#     def get(self):
+#         forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
+#         for form_name, field_names in forms.items():
 
 # example payload to be received from Meerkat Nest
 
