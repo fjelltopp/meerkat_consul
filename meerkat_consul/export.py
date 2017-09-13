@@ -35,7 +35,7 @@ class ExportLocationTree(Resource):
             dhis2_parent_id = dhis2_country_details[0]["id"]
         else:
             dhis2_parent_id = self.__create_new_dhis2_organisation(country_details, COUNTRY_PARENT)
-
+        ExportLocationTree.__codes_to_dhis2_ids[dhis2_organisation_code] = dhis2_parent_id
         child_locations = country["nodes"]
         self.__populate_child_locations(dhis2_parent_id, child_locations)
 
@@ -104,67 +104,83 @@ class ExportFormFields(Resource):
             if data_element_id not in ExportFormFields.dhis2_code_to_ids:
                 data_element = get("{}dataElements/{}".format(dhis2_api_url, data_element_id),
                                    headers=dhis2_headers).json()
-                ExportFormFields.dhis2_code_to_ids[data_element_id] = data_element.get('code')
+                ExportFormFields.dhis2_code_to_ids[data_element.get('code')] = data_element_id
 
-        dhis2_codes_lookup = set(ExportFormFields.dhis2_code_to_ids.values())
+        print(str(datetime.now().time()) + " Done with dhis2_code_to_ids")
+        dhis2_codes_lookup = set(ExportFormFields.dhis2_code_to_ids)
         forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
         for form_name, field_names in forms.items():
             for field_name in field_names:
                 if not field_name in dhis2_codes_lookup:
                     id = self.__update_data_elements(field_name)
-                    ExportFormFields.dhis2_code_to_ids[id] = (field_name)
+                    ExportFormFields.dhis2_code_to_ids[field_name] = id
 
             rv = get("{}programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
             programs = rv.json().get('programs', [])
             program_payload = {
                 'name': form_name,
                 'shortName': form_name,
+                'code': form_name,
                 'programType': 'WITHOUT_REGISTRATION'
             }
             if programs:
                 # Update organisations
                 program_id = programs[0]["id"]
+                program_payload["id"] = program_id
                 req = get("{}programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
-                old_organisation_ids = req.json().get('organisationUnits', [])
+                old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
 
-                organisations = list(set(old_organisation_ids) | set(self.__get_all_operational_clinics()))
+                organisations = list(set(old_organisation_ids) | set(ExportFormFields.get_all_operational_clinics_as_dhis2_ids()))
                 program_payload["organisationUnits"] = [{"id": x} for x in organisations]
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
-                req = put("{}programs{}?orgUnitIdScheme=CODE".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
+                req = put("{}programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
                 logger.info("Updated program %s with status %d", program_id, req.status_code)
+
             else:
                 program_id = dhis2_ids.pop()
+                program_payload["id"] = program_id
                 old_organisation_ids = []
 
-                organisations = list(set(old_organisation_ids) | set(self.__get_all_operational_clinics()))
+                organisations = list(set(old_organisation_ids) | set(ExportFormFields.get_all_operational_clinics_as_dhis2_ids()))
                 program_payload["organisationUnits"] = [{"id": x} for x in organisations]
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
-                req = post("{}programs?orgUnitIdScheme=CODE".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
-                logger.info("Updated program %s with status %d", program_id, req.status_code)
+                req = post("{}programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
+                logger.info("Created program %s with status %d", program_id, req.status_code)
             # Update data elements
-            data_element_keys = [{"dataElement": {"code": code}} for code in field_names]
+            data_element_keys = [{"dataElement": {"id": ExportFormFields.dhis2_code_to_ids.get(code)}} for code in field_names]
+            # Update data elements
+            stages = get("{}programStages?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers).json()
             stage_payload = {
                 "name": form_name,
                 "code": form_name,
                 "program": {
-                    "code": form_name
+                    "id": program_id
                 },
                 "programStageDataElements": data_element_keys
             }
-            json_stage_payload = json.dumps(stage_payload)
-            res = post("{}programStages?orgUnitIdScheme=CODE&programIdScheme=CODE&dataElementIdScheme=CODE".format(api_url), data=json_stage_payload, headers=headers)
-            logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+            if stages.get("programStages"):
+                stage_id = stages.get("programStages")[0]["id"]
+                json_stage_payload = json.dumps(stage_payload)
+                res = put("{}programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload, headers=dhis2_headers)
+                logger.info("Updated stage for program %s with status %d", form_name, res.status_code)
+            else:
+                stage_id = dhis2_ids.pop()
+                stage_payload["id"] = stage_id
+                json_stage_payload = json.dumps(stage_payload)
+                res = post("{}programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
+                logger.info("Created stage for program %s with status %d", form_name, res.status_code)
 
         print(str(datetime.now().time()) + " DONE!")
 
     @staticmethod
-    def __get_all_operational_clinics():
+    def get_all_operational_clinics_as_dhis2_ids():
         locations = requests.get("{}/locations".format(api_url), headers=headers).json()
         for location in locations.values():
             if location.get('case_report') != 0 and location.get('level') == 'clinic':
-                yield location.get('country_location_id')
+                organisations = get("{}organisationUnits?filter=code:eq:{}".format(dhis2_api_url, location.get('country_location_id')), headers=dhis2_headers).json()
+                yield organisations['organisationUnits'][0]['id']
 
     @staticmethod
     def __update_data_elements(key):

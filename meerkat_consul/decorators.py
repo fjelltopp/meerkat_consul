@@ -1,3 +1,5 @@
+from json import JSONDecodeError
+
 import requests
 
 from meerkat_consul import logger
@@ -58,5 +60,8 @@ def delete(url, **kwargs):
 def __check_if_response_is_ok(response):
     if 200 < response.status_code >= 300:
         logger.error("Request failed with code %d.", response.status_code)
-        logger.error(response.json().get("message"), stack_info=True)
+        try:
+            logger.error(response.json().get("message"), stack_info=True)
+        except JSONDecodeError:
+            logger.error(response.text, stack_info=True)
     return response
