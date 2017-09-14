@@ -1,10 +1,12 @@
 import json
+from collections import defaultdict
+from json import JSONDecodeError
 
 from datetime import datetime
 import requests
-from flask_restful import abort, Resource
+from flask_restful import abort, Resource, reqparse
 
-from meerkat_consul import app, dhis2_config, logger, api_url
+from meerkat_consul import dhis2_config, logger, api_url
 from meerkat_consul.config import COUNTRY_LOCATION_ID, headers
 from meerkat_consul.decorators import get, post, put
 from meerkat_consul.dhis2 import NewIdsProvider
@@ -19,8 +21,6 @@ COUNTRY_PARENT = 'ImspTQPwCqd'  # for testing with demo DHIS2 server, country sh
 
 
 class ExportLocationTree(Resource):
-    __codes_to_dhis2_ids = {}
-
     def get(self):
         location_tree = requests.get("{}/locationtree".format(api_url), headers=headers)
         country = location_tree.json()
@@ -35,7 +35,7 @@ class ExportLocationTree(Resource):
             dhis2_parent_id = dhis2_country_details[0]["id"]
         else:
             dhis2_parent_id = self.__create_new_dhis2_organisation(country_details, COUNTRY_PARENT)
-        ExportLocationTree.__codes_to_dhis2_ids[dhis2_organisation_code] = dhis2_parent_id
+        # ExportLocationTree.__codes_to_dhis2_ids[dhis2_organisation_code] = dhis2_parent_id
         child_locations = country["nodes"]
         self.__populate_child_locations(dhis2_parent_id, child_locations)
 
@@ -55,7 +55,7 @@ class ExportLocationTree(Resource):
 
             id = ExportLocationTree.__create_new_dhis2_organisation(location_details, dhis2_parent_id)
             location_code = location_details["country_location_id"]
-            ExportLocationTree.__codes_to_dhis2_ids[location_code] = id
+            # ExportLocationTree.__codes_to_dhis2_ids[location_code] = id
 
             child_locations = location["nodes"]
             ExportLocationTree.__populate_child_locations(id, child_locations)
@@ -130,7 +130,8 @@ class ExportFormFields(Resource):
                 req = get("{}programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
                 old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
 
-                organisations = list(set(old_organisation_ids) | set(ExportFormFields.get_all_operational_clinics_as_dhis2_ids()))
+                organisations = list(
+                    set(old_organisation_ids) | set(ExportFormFields.get_all_operational_clinics_as_dhis2_ids()))
                 program_payload["organisationUnits"] = [{"id": x} for x in organisations]
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
@@ -142,16 +143,19 @@ class ExportFormFields(Resource):
                 program_payload["id"] = program_id
                 old_organisation_ids = []
 
-                organisations = list(set(old_organisation_ids) | set(ExportFormFields.get_all_operational_clinics_as_dhis2_ids()))
+                organisations = list(
+                    set(old_organisation_ids) | set(ExportFormFields.get_all_operational_clinics_as_dhis2_ids()))
                 program_payload["organisationUnits"] = [{"id": x} for x in organisations]
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
                 req = post("{}programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
                 logger.info("Created program %s with status %d", program_id, req.status_code)
             # Update data elements
-            data_element_keys = [{"dataElement": {"id": ExportFormFields.dhis2_code_to_ids.get(code)}} for code in field_names]
+            data_element_keys = [{"dataElement": {"id": ExportFormFields.dhis2_code_to_ids.get(code)}} for code in
+                                 field_names]
             # Update data elements
-            stages = get("{}programStages?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers).json()
+            stages = get("{}programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
+                         headers=dhis2_headers).json()
             stage_payload = {
                 "name": form_name,
                 "code": form_name,
@@ -163,7 +167,8 @@ class ExportFormFields(Resource):
             if stages.get("programStages"):
                 stage_id = stages.get("programStages")[0]["id"]
                 json_stage_payload = json.dumps(stage_payload)
-                res = put("{}programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload, headers=dhis2_headers)
+                res = put("{}programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload,
+                          headers=dhis2_headers)
                 logger.info("Updated stage for program %s with status %d", form_name, res.status_code)
             else:
                 stage_id = dhis2_ids.pop()
@@ -179,8 +184,7 @@ class ExportFormFields(Resource):
         locations = requests.get("{}/locations".format(api_url), headers=headers).json()
         for location in locations.values():
             if location.get('case_report') != 0 and location.get('level') == 'clinic':
-                organisations = get("{}organisationUnits?filter=code:eq:{}".format(dhis2_api_url, location.get('country_location_id')), headers=dhis2_headers).json()
-                yield organisations['organisationUnits'][0]['id']
+                yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
 
     @staticmethod
     def __update_data_elements(key):
@@ -195,46 +199,38 @@ class ExportFormFields(Resource):
             'aggregationType': 'NONE'
         })
         post_res = post("{}dataElements".format(dhis2_api_url), data=json_payload, headers=dhis2_headers)
-        json_res = post_res.json()
-        logger.info("Created data element \"{}\"".format(key))
+        logger.info("Created data element \"{}\" with status {!r}".format(key, post_res.status_code))
         return id
 
 
-# class ExportProgram(Resource):
-#
-#     def get(self):
-#         forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
-#         for form_name, field_names in forms.items():
-
 # example payload to be received from Meerkat Nest
 
-
-upload_payload = {"token": "", "content": "record", "formId": "jor_evaluation", "formVersion": "",
-                  "data": {"*meta-instance-id*": "uuid:32751c98-8390-4fa0-b0ed-1392d1ece3bc",
-                           "*meta-model-version*": "null", "*meta-ui-version*": "null",
-                           "*meta-submission-date*": "2017-09-06T13:56:02.777Z", "*meta-is-complete*": "true",
-                           "*meta-date-marked-as-complete*": "2017-09-06T13:56:02.777Z",
-                           "start": "2017-09-06T13:55:51.792Z", "end": "2017-09-06T13:55:59.703Z",
-                           "today": "2017-09-06", "deviceid": "864422031325435", "subscriberid": "244121302512660",
-                           "simid": "8935806150918576602", "phonenumber": "0449105968", "evaluation": "null",
-                           "when": "other", "position": "data", "position_other": "null", "pre": "null",
-                           "pre_yes": "null",
-                           "pre_no": "null", "pre_yes_other": "null", "pre_no_other": "null", "pre_cd": "null",
-                           "pre_clinical": "null", "pre_alerts": "null", "pre_online": "null", "pre_identify": "null",
-                           "pre_report": "null", "pre_ncd": "null", "pre_ncd_yes": "null", "pre_ncd_other": "null",
-                           "pre_time": "null", "post": "null", "post_yes": "null", "post_no": "null",
-                           "post_yes_other": "null",
-                           "post_no_other": "null", "post_cd": "null", "post_clinical": "null", "post_alerts": "null",
-                           "post_online": "null", "post_identify": "null", "post_report": "null", "post_ncd": "null",
-                           "post_ncd_yes": "null", "post_ncd_other": "null", "post_time": "null", "comments": "Bdke",
-                           "instanceID": "uuid:32751c98-8390-4fa0-b0ed-1392d1ece3bc"},
-                  "uuid": "uuid:32751c98-8390-4fa0-b0ed-1392d1ece3bc"}
+upload_payload = {'token': '', 'content': 'record', 'formId': 'demo_register', 'formVersion': '',
+                  'data': {
+                      'end': '2017-08-31T00:00:00',
+                      'index': '48',
+                      'start': '2017-08-24T00:00:00',
+                      'deviceid': 'random',
+                      'intro./module': 'two',
+                      'SubmissionDate': 'values',
+                      'meta/instanceID': 'random',
+                      'surveillance./afp': 'bar',
+                      'surveillance./measles': 'two',
+                      'consult./consultations': 'random',
+                      'consult./ncd_consultations': 'matters',
+                      'consult./consultations_refugee': 'bar',
+                      'clinic': '5',
+                      'district': '5',
+                      'region': '2'
+                  },
+                  'uuid': '8cc2e81a-988b-11e7-8b9b-507b9dab1486'
+                  }
 messages = {'Messages': [
     {
         'MessageId': 'test-message-id-1',
         'ReceiptHandle': 'test-receipt-handle-1',
         'MD5OfBody': 'test-md5-1',
-        'Body': json.dumps(upload_payload),
+        'Body': upload_payload,
         'Attributes': {
             'test-attribute': 'test-attribute-value'
         }
@@ -243,9 +239,67 @@ messages = {'Messages': [
         'MessageId': 'test-message-id-2',
         'ReceiptHandle': 'test-receipt-handle-2',
         'MD5OfBody': 'test-md5-2',
-        'Body': json.dumps(upload_payload),
+        'Body': upload_payload,
         'Attributes': {
             'test-attribute': 'test-attribute-value'
         }
     }
 ]}
+
+
+class ExportEvent(Resource):
+    def post(self):
+        event_payload_array = []
+        try:
+            json_request = json.loads(reqparse.request.get_json())
+        except JSONDecodeError:
+            abort(400, messages="Unable to parse posted JSON")
+        for message in json_request['Messages']:
+            case = message['Body']
+            program = case['formId']
+            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
+                           case['data'].items()]
+            event_payload = {
+                'program': Dhis2CodesToIdsCache.get_program_id(program),
+                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id('unique_code_1'),
+                'eventDate': '1970-01-01',
+                'completedDate': '2017-09-13',
+                'dataValues': data_values,
+                'status': 'COMPLETED'
+            }
+            event_payload_array.append(event_payload)
+        events_payload = {"events": event_payload_array}
+        event_res = post("{}events".format(dhis2_api_url), headers=dhis2_headers, data=json.dumps(events_payload))
+        logger.info("Send batch of events with status: %d", event_res.status_code)
+        logger.info(event_res.json().get('message'))
+
+
+class Dhis2CodesToIdsCache():
+    caches = defaultdict(dict)
+
+    @staticmethod
+    def get_organisation_id(organisation_code):
+        return Dhis2CodesToIdsCache.get_and_cache_value('organisationUnits', organisation_code)
+
+    @staticmethod
+    def get_data_element_id(data_element_code):
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', data_element_code)
+
+    @staticmethod
+    def get_program_id(program_code):
+        return Dhis2CodesToIdsCache.get_and_cache_value('programs', program_code)
+
+    @staticmethod
+    def get_and_cache_value(dhis2_resource, dhis2_code):
+        cache = Dhis2CodesToIdsCache.caches[dhis2_resource]
+        if not cache.get(dhis2_code):
+            rv = get("{url}/{resource_path}?filter=code:eq:{code}".format(
+                url=dhis2_api_url,
+                resource_path=dhis2_resource,
+                code=dhis2_code),
+                headers=dhis2_headers)
+            dhis2_objects = rv.json().get(dhis2_resource)
+            if len(dhis2_objects) != 1:
+                logger.error("Found more then one dhis2 {} for code: {}".format(dhis2_resource, dhis2_code))
+            cache[dhis2_code] = dhis2_objects[0]["id"]
+        return cache.get(dhis2_code)

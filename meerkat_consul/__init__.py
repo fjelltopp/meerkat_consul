@@ -22,18 +22,20 @@ if not logger.handlers:
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
-from meerkat_consul.export import ExportLocationTree
+from meerkat_consul.export import ExportLocationTree, ExportFormFields, ExportEvent
 
 api.add_resource(ExportLocationTree, "/exportLocationTree")
+api.add_resource(ExportFormFields, "/exportFormField")
+api.add_resource(ExportEvent, "/exportEvent")
 
 @app.route('/')
 def root():
     return '{"name":"meerkat_consul"}'
 
 if __name__ == '__main__':
-    from meerkat_consul.export import ExportFormFields, ExportLocationTree
-    ExportLocationTree().get()
-    while(True):
-        ExportFormFields().get()
-
-    # app.run(host="0.0.0.0")
+    # from meerkat_consul.export import ExportFormFields, ExportLocationTree
+    # ExportLocationTree().get()
+    # while(True):
+    #     ExportFormFields().get()
+    #
+    app.run(host="0.0.0.0", debug=True, use_reloader=False)
