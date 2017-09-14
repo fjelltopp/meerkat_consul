@@ -6,8 +6,11 @@ env:
   - MEERKAT_AUTH_SETTINGS=/var/www/meerkat_libs/meerkat_libs/auth_client/sample_auth.cfg
   - MEERKAT_API_URL=http://nginx/api
 install:
-- pip install .
 - pip install -r requirements.txt
+- git clone https://github.com/meerkat-code/meerkat_libs.git
+- cd meerkat_libs
+- pip install .
+- cd ../
 script: nosetests --logging-level=WARNING
 notifications:
   slack:
