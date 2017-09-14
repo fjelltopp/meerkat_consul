@@ -1,0 +1,14 @@
+language: python
+python:
+- '3.6'
+env:
+  global:
+  - MEERKAT_AUTH_SETTINGS=/var/www/meerkat_libs/meerkat_libs/auth_client/sample_auth.cfg
+  - MEERKAT_API_URL=http://nginx/api
+install:
+- pip install .
+- pip install -r requirements.txt
+script: nosetests --logging-level=WARNING
+notifications:
+  slack:
+    secure: wNNbowxMRM0PckCNY7GtzIGg+hle5xjfAajfVE1nSqPZuYc54OsjE4isHXM9yec0BXwKPzDmQH3vbrj7DCzgZEmiIifwsPpsicpnGk5kgrfo4ec7bOidfpxH/BzsN8ZA9EunXLE8bIFD3o0tWpXhKXnA1OksqI1wKPDG+hwsme1thgn6kYkA4DmMqkaa+mwKkD3RWRsw4WV51f6JAwb5ucpLSHzoANmG8VYQZJ5egpIFHr6Zi6j+gJHhHaRQ1OQUaPoQLw/jmE76hZWjV52TXwfJujYa8udDfjJSlNtSM2hAmf6odRkZJkCe/MYLtsBs+L9xaLp3XOZzEbfMzSQIhtwVaIMBQfULlcJwMKiYyUKcNHYVLNzPEXuIPCNKlgGzTBNQ943plr++auiOTy6nUZQHq+mvZysZUuFSSLXMMhMZSu9p4djH4Zt5G8Rhoy2uOO+MFWqsvXCGpNTGQAG8kGq72m1MhPdE7uViDcdmlNI/qpp4hM2Ori19fDzUmBtmDlNqup9V3EU5lWQUF7YxkPmC25En1XhahOVxtnz6O5QDDbNXgS0l1mr3r1AeoLzh1s79vLlXmD71waQxknvXFQRVldJXlIkU55i9vhD1p2oV2tZhP1f4cEd4p2KqiumlmRIstu3vPWSOJlRYb141B0y/aAJdaMiBptemtkfb0is=
