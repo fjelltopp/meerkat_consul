@@ -5,7 +5,6 @@ env:
   global:
   - MEERKAT_AUTH_SETTINGS=/var/www/meerkat_libs/meerkat_libs/auth_client/sample_auth.cfg
   - MEERKAT_API_URL=http://nginx/api
-  - TEST=please_work
 install:
 - pip install .
 - pip install -r requirements.txt
