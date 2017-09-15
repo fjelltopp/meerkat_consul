@@ -21,7 +21,7 @@ COUNTRY_PARENT = 'ImspTQPwCqd'  # for testing with demo DHIS2 server, country sh
 
 
 class ExportLocationTree(Resource):
-    def get(self):
+    def post(self):
         location_tree = requests.get("{}/locationtree".format(api_url), headers=headers)
         country = location_tree.json()
         country_details = get("{}/location/{!r}".format(api_url, COUNTRY_LOCATION_ID)).json()
@@ -93,27 +93,26 @@ class ExportLocationTree(Resource):
 
 
 class ExportFormFields(Resource):
-    dhis2_code_to_ids = {}
+    dhis2_code_lookup = set()
 
-    def get(self):
+    def post(self):
         print(str(datetime.now().time()) + " Start!")
         dhis2_data_elements_res = get("{}dataElements?paging=False".format(dhis2_api_url), headers=dhis2_headers)
         dhis2_data_elements = dhis2_data_elements_res.json()['dataElements']
         for d in dhis2_data_elements:
             data_element_id = d["id"]
-            if data_element_id not in ExportFormFields.dhis2_code_to_ids:
+            if data_element_id not in ExportFormFields.dhis2_code_lookup:
                 data_element = get("{}dataElements/{}".format(dhis2_api_url, data_element_id),
                                    headers=dhis2_headers).json()
-                ExportFormFields.dhis2_code_to_ids[data_element.get('code')] = data_element_id
+                ExportFormFields.dhis2_code_lookup.add(data_element.get('code'))
 
         print(str(datetime.now().time()) + " Done with dhis2_code_to_ids")
-        dhis2_codes_lookup = set(ExportFormFields.dhis2_code_to_ids)
         forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
         for form_name, field_names in forms.items():
             for field_name in field_names:
-                if not field_name in dhis2_codes_lookup:
+                if not field_name in ExportFormFields.dhis2_code_lookup:
                     id = self.__update_data_elements(field_name)
-                    ExportFormFields.dhis2_code_to_ids[field_name] = id
+                    ExportFormFields.dhis2_code_lookup.add(field_name)
 
             rv = get("{}programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
             programs = rv.json().get('programs', [])
@@ -136,7 +135,7 @@ class ExportFormFields(Resource):
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
                 req = put("{}programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
-                logger.info("Updated program %s with status %d", program_id, req.status_code)
+                logger.info("Updated program %s (id:%s) with status %d", form_name, program_id, req.status_code)
 
             else:
                 program_id = dhis2_ids.pop()
@@ -149,9 +148,9 @@ class ExportFormFields(Resource):
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
                 req = post("{}programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
-                logger.info("Created program %s with status %d", program_id, req.status_code)
+                logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
             # Update data elements
-            data_element_keys = [{"dataElement": {"id": ExportFormFields.dhis2_code_to_ids.get(code)}} for code in
+            data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
                                  field_names]
             # Update data elements
             stages = get("{}programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
@@ -257,9 +256,13 @@ class ExportEvent(Resource):
         for message in json_request['Messages']:
             case = message['Body']
             program = case['formId']
+            uuid = case['data'].get('meta/instanceID')[-11:]
+            event_id = uuid_to_dhis2_uid(uuid)
             data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                            case['data'].items()]
+            logger.info("Creating event with id %s", event_id)
             event_payload = {
+                'event': event_id,
                 'program': Dhis2CodesToIdsCache.get_program_id(program),
                 'orgUnit': Dhis2CodesToIdsCache.get_organisation_id('unique_code_1'),
                 'eventDate': '1970-01-01',
@@ -269,9 +272,17 @@ class ExportEvent(Resource):
             }
             event_payload_array.append(event_payload)
         events_payload = {"events": event_payload_array}
-        event_res = post("{}events".format(dhis2_api_url), headers=dhis2_headers, data=json.dumps(events_payload))
+        event_res = post("{}events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers, data=json.dumps(events_payload))
         logger.info("Send batch of events with status: %d", event_res.status_code)
         logger.info(event_res.json().get('message'))
+
+
+def uuid_to_dhis2_uid(uuid):
+    result = uuid[-11:]
+    # DHIS2 uid needs to start with a character
+    if result[0].isdigit():
+        result = 'X' + result[1:]
+    return result
 
 
 class Dhis2CodesToIdsCache():
