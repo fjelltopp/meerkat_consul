@@ -24,9 +24,9 @@ api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
 from meerkat_consul.export import ExportLocationTree, ExportFormFields, ExportEvent
 
-api.add_resource(ExportLocationTree, "/exportLocationTree")
-api.add_resource(ExportFormFields, "/exportFormField")
-api.add_resource(ExportEvent, "/exportEvent")
+api.add_resource(ExportLocationTree, "/dhis2/export/locationTree")
+api.add_resource(ExportFormFields, "/dhis2/export/formFields")
+api.add_resource(ExportEvent, "/dhis2/export/events")
 
 @app.route('/')
 def root():
