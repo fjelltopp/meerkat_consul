@@ -93,26 +93,13 @@ class ExportLocationTree(Resource):
 
 
 class ExportFormFields(Resource):
-    dhis2_code_lookup = set()
 
     def post(self):
-        print(str(datetime.now().time()) + " Start!")
-        dhis2_data_elements_res = get("{}dataElements?paging=False".format(dhis2_api_url), headers=dhis2_headers)
-        dhis2_data_elements = dhis2_data_elements_res.json()['dataElements']
-        for d in dhis2_data_elements:
-            data_element_id = d["id"]
-            if data_element_id not in ExportFormFields.dhis2_code_lookup:
-                data_element = get("{}dataElements/{}".format(dhis2_api_url, data_element_id),
-                                   headers=dhis2_headers).json()
-                ExportFormFields.dhis2_code_lookup.add(data_element.get('code'))
-
-        print(str(datetime.now().time()) + " Done with dhis2_code_to_ids")
         forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
         for form_name, field_names in forms.items():
             for field_name in field_names:
-                if not field_name in ExportFormFields.dhis2_code_lookup:
-                    id = self.__update_data_elements(field_name)
-                    ExportFormFields.dhis2_code_lookup.add(field_name)
+                if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
+                    self.__update_data_elements(field_name)
 
             rv = get("{}programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
             programs = rv.json().get('programs', [])
@@ -176,7 +163,6 @@ class ExportFormFields(Resource):
                 res = post("{}programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
                 logger.info("Created stage for program %s with status %d", form_name, res.status_code)
 
-        print(str(datetime.now().time()) + " DONE!")
 
     @staticmethod
     def get_all_operational_clinics_as_dhis2_ids():
@@ -310,7 +296,18 @@ class Dhis2CodesToIdsCache():
                 code=dhis2_code),
                 headers=dhis2_headers)
             dhis2_objects = rv.json().get(dhis2_resource)
-            if len(dhis2_objects) != 1:
+            if len(dhis2_objects) == 0:
+                raise ValueError("{} with code {} not found".format(dhis2_resource, dhis2_code))
+            elif len(dhis2_objects) != 1:
                 logger.error("Found more then one dhis2 {} for code: {}".format(dhis2_resource, dhis2_code))
             cache[dhis2_code] = dhis2_objects[0]["id"]
         return cache.get(dhis2_code)
+
+    @staticmethod
+    def has_data_element_with_code(dhis2_code):
+        try:
+            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
+        except ValueError:
+            return False
+        return True
+
