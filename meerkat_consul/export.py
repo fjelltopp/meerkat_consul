@@ -40,7 +40,7 @@ class ExportLocationTree(Resource):
         child_locations = country["nodes"]
         self.__populate_child_locations(dhis2_parent_id, child_locations)
 
-        return 'ok'
+        return {"message": "Exporting location tree finished successfully"}
 
     @staticmethod
     def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
@@ -162,6 +162,7 @@ class ExportFormFields(Resource):
                 json_stage_payload = json.dumps(stage_payload)
                 res = post("{}programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
                 logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+        return {"message": "Exporting form metadata finished successfully"}
 
     @staticmethod
     def get_all_operational_clinics_as_dhis2_ids():
@@ -262,6 +263,7 @@ class ExportEvent(Resource):
                          data=json.dumps(events_payload))
         logger.info("Send batch of events with status: %d", event_res.status_code)
         logger.info(event_res.json().get('message'))
+        return {"message": "Sending event batch finished successfully"}
 
 
 def uuid_to_dhis2_uid(uuid):
