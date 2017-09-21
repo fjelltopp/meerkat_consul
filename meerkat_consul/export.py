@@ -162,6 +162,7 @@ class ExportFormFields(Resource):
                 json_stage_payload = json.dumps(stage_payload)
                 res = post("{}programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
                 logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+
         return {"message": "Exporting form metadata finished successfully"}
 
     @staticmethod
@@ -274,6 +275,14 @@ def uuid_to_dhis2_uid(uuid):
     return result
 
 
+def uuid_to_dhis2_uid(uuid):
+    result = uuid[-11:]
+    # DHIS2 uid needs to start with a character
+    if result[0].isdigit():
+        result = 'X' + result[1:]
+    return result
+
+
 class Dhis2CodesToIdsCache():
     caches = defaultdict(dict)
 
@@ -313,3 +322,12 @@ class Dhis2CodesToIdsCache():
                 logger.error("Found more then one dhis2 {} for code: {}".format(dhis2_resource, dhis2_code))
             cache[dhis2_code] = dhis2_objects[0]["id"]
         return cache.get(dhis2_code)
+
+    @staticmethod
+    def has_data_element_with_code(dhis2_code):
+        try:
+            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
+        except ValueError:
+            return False
+        return True
+
