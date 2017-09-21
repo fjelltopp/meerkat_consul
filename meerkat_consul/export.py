@@ -7,7 +7,8 @@ import requests
 from flask_restful import abort, Resource, reqparse
 
 from meerkat_consul import dhis2_config, logger, api_url
-from meerkat_consul.config import COUNTRY_LOCATION_ID, headers
+from meerkat_consul.config import COUNTRY_LOCATION_ID
+from meerkat_consul.authenticate import headers
 from meerkat_consul.decorators import get, post, put
 from meerkat_consul.dhis2 import NewIdsProvider
 
@@ -39,7 +40,7 @@ class ExportLocationTree(Resource):
         child_locations = country["nodes"]
         self.__populate_child_locations(dhis2_parent_id, child_locations)
 
-        return 'ok'
+        return {"message": "Exporting location tree finished successfully"}
 
     @staticmethod
     def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
@@ -93,7 +94,6 @@ class ExportLocationTree(Resource):
 
 
 class ExportFormFields(Resource):
-
     def post(self):
         forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
         for form_name, field_names in forms.items():
@@ -163,6 +163,7 @@ class ExportFormFields(Resource):
                 res = post("{}programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
                 logger.info("Created stage for program %s with status %d", form_name, res.status_code)
 
+        return {"message": "Exporting form metadata finished successfully"}
 
     @staticmethod
     def get_all_operational_clinics_as_dhis2_ids():
@@ -188,7 +189,7 @@ class ExportFormFields(Resource):
         return id
 
 
-# example payload to be received from Meerkat Nest
+#### example payload to be received from Meerkat Nest
 
 upload_payload = {'token': '', 'content': 'record', 'formId': 'demo_register', 'formVersion': '',
                   'data': {
@@ -231,6 +232,7 @@ messages = {'Messages': [
     }
 ]}
 
+###### end of example payload
 
 class ExportEvent(Resource):
     def post(self):
@@ -258,9 +260,19 @@ class ExportEvent(Resource):
             }
             event_payload_array.append(event_payload)
         events_payload = {"events": event_payload_array}
-        event_res = post("{}events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers, data=json.dumps(events_payload))
+        event_res = post("{}events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
+                         data=json.dumps(events_payload))
         logger.info("Send batch of events with status: %d", event_res.status_code)
         logger.info(event_res.json().get('message'))
+        return {"message": "Sending event batch finished successfully"}
+
+
+def uuid_to_dhis2_uid(uuid):
+    result = uuid[-11:]
+    # DHIS2 uid needs to start with a character
+    if result[0].isdigit():
+        result = 'X' + result[1:]
+    return result
 
 
 def uuid_to_dhis2_uid(uuid):
@@ -285,6 +297,14 @@ class Dhis2CodesToIdsCache():
     @staticmethod
     def get_program_id(program_code):
         return Dhis2CodesToIdsCache.get_and_cache_value('programs', program_code)
+
+    @staticmethod
+    def has_data_element_with_code(dhis2_code):
+        try:
+            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
+        except ValueError:
+            return False
+        return True
 
     @staticmethod
     def get_and_cache_value(dhis2_resource, dhis2_code):
