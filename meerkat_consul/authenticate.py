@@ -14,5 +14,7 @@ def get_token():
 
 if not app.config['TESTING']:
     headers = {'Authorization': JWT_HEADER_PREFIX + get_token()}
+else:
+    headers = {'Authorization': JWT_HEADER_PREFIX + 'TESTING'}
 
 
