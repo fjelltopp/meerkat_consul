@@ -3,6 +3,7 @@ python:
 - '3.6'
 env:
   global:
+  - CONFIG_OBJECT=config.Testing
   - MEERKAT_AUTH_SETTINGS=meerkat_libs/meerkat_libs/auth_client/sample_auth.cfg
   - MEERKAT_API_URL=http://nginx/api
 install:

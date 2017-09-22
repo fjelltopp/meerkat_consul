@@ -6,20 +6,20 @@ from datetime import datetime
 import requests
 from flask_restful import abort, Resource, reqparse
 
-from meerkat_consul import dhis2_config, logger, api_url
-from meerkat_consul.config import COUNTRY_LOCATION_ID
+from meerkat_consul import logger, api_url, app
 from meerkat_consul.authenticate import headers
 from meerkat_consul.decorators import get, post, put
 from meerkat_consul.dhis2 import NewIdsProvider
 
 __codes_to_ids = {}
+dhis2_config = app.config['DHIS2_CONFIG']
 dhis2_api_url = dhis2_config["url"] + dhis2_config["apiResource"]
 dhis2_headers = dhis2_config["headers"]
 
 dhis2_ids = NewIdsProvider(dhis2_api_url, dhis2_headers)
 
 COUNTRY_PARENT = 'ImspTQPwCqd'  # for testing with demo DHIS2 server, country should have no parent
-
+COUNTRY_LOCATION_ID = app.config['COUNTRY_LOCATION_ID']
 
 class ExportLocationTree(Resource):
     def post(self):

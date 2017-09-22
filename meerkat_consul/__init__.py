@@ -5,20 +5,25 @@ from flask import Flask
 from flask_restful import Api
 
 app = Flask(__name__)
+app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
 api = Api(app)
 
-from meerkat_consul.config import dhis2_config
 
 logger = logging.getLogger("meerkat_consul")
 if not logger.handlers:
-    FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logging_format = app.config['LOGGING_FORMAT']
+    logging_level_ = app.config['LOGGING_LEVEL']
     handler = logging.StreamHandler()
-    formatter = logging.Formatter(FORMAT)
+    formatter = logging.Formatter(logging_format)
     handler.setFormatter(formatter)
-    level_name = dhis2_config.get("loggingLevel", "ERROR")
-    level = logging.getLevelName(level_name)
+    level = logging.getLevelName(logging_level_)
+
     logger.setLevel(level)
     logger.addHandler(handler)
+
+    backoff_logger = logging.getLogger('backoff')
+    backoff_logger.setLevel(logging_level_)
+    backoff_logger.addHandler(handler)
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
