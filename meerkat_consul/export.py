@@ -243,16 +243,19 @@ class ExportEvent(Resource):
             abort(400, messages="Unable to parse posted JSON")
         for message in json_request['Messages']:
             case = message['Body']
+            case_data = case['data']
             program = case['formId']
             uuid = case['data'].get('meta/instanceID')[-11:]
             event_id = uuid_to_dhis2_uid(uuid)
             data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                            case['data'].items()]
-            logger.info("Creating event with id %s", event_id)
+            # logger.info("Creating event with id %s", event_id)
+            location_req = requests.get("{}/device/{}".format(api_url, case_data['deviceid']))
+            country_location_id = location_req.json().get('country_location_id')
             event_payload = {
                 'event': event_id,
                 'program': Dhis2CodesToIdsCache.get_program_id(program),
-                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id('unique_code_1'),
+                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
                 'eventDate': '1970-01-01',
                 'completedDate': '2017-09-13',
                 'dataValues': data_values,

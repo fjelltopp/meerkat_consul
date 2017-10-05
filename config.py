@@ -26,7 +26,7 @@ class Production(Config):
 class Development(Config):
     DEBUG = True
 
-    LOGGING_LEVEL = "WARNING"
+    LOGGING_LEVEL = "INFO"
 
 
 class Testing(Config):
