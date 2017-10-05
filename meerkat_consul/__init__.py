@@ -1,6 +1,8 @@
 import logging
 import os
 
+import backoff as backoff
+import requests
 from flask import Flask
 from flask_restful import Api
 
@@ -26,6 +28,12 @@ if not logger.handlers:
     backoff_logger.addHandler(handler)
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
+
+@backoff.on_predicate(backoff.expo, max_tries=8, max_value=30)
+def wait_for_api():
+    return requests.get(api_url).text
+
+wait_for_api()
 
 from meerkat_consul.export import ExportLocationTree, ExportFormFields, ExportEvent
 
