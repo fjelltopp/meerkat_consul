@@ -2,6 +2,7 @@ import json
 from collections import defaultdict
 from json import JSONDecodeError
 
+import backoff as backoff
 from datetime import datetime
 import requests
 from flask_restful import abort, Resource, reqparse
@@ -35,8 +36,7 @@ class ExportLocationTree(Resource):
             self.__abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code)
             dhis2_parent_id = dhis2_country_details[0]["id"]
         else:
-            dhis2_parent_id = self.__create_new_dhis2_organisation(country_details, COUNTRY_PARENT)
-        # ExportLocationTree.__codes_to_dhis2_ids[dhis2_organisation_code] = dhis2_parent_id
+            abort(500, message="Error: Country location not found in DHIS2")
         child_locations = country["nodes"]
         self.__populate_child_locations(dhis2_parent_id, child_locations)
 
@@ -188,51 +188,9 @@ class ExportFormFields(Resource):
         logger.info("Created data element \"{}\" with status {!r}".format(key, post_res.status_code))
         return id
 
+def meerkat_to_dhis2_date_format(meerkat_date):
+    return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y-%m-%d")
 
-#### example payload to be received from Meerkat Nest
-
-upload_payload = {'token': '', 'content': 'record', 'formId': 'demo_register', 'formVersion': '',
-                  'data': {
-                      'end': '2017-08-31T00:00:00',
-                      'index': '48',
-                      'start': '2017-08-24T00:00:00',
-                      'deviceid': 'random',
-                      'intro./module': 'two',
-                      'SubmissionDate': 'values',
-                      'meta/instanceID': 'random',
-                      'surveillance./afp': 'bar',
-                      'surveillance./measles': 'two',
-                      'consult./consultations': 'random',
-                      'consult./ncd_consultations': 'matters',
-                      'consult./consultations_refugee': 'bar',
-                      'clinic': '5',
-                      'district': '5',
-                      'region': '2'
-                  },
-                  'uuid': '8cc2e81a-988b-11e7-8b9b-507b9dab1486'
-                  }
-messages = {'Messages': [
-    {
-        'MessageId': 'test-message-id-1',
-        'ReceiptHandle': 'test-receipt-handle-1',
-        'MD5OfBody': 'test-md5-1',
-        'Body': upload_payload,
-        'Attributes': {
-            'test-attribute': 'test-attribute-value'
-        }
-    },
-    {
-        'MessageId': 'test-message-id-2',
-        'ReceiptHandle': 'test-receipt-handle-2',
-        'MD5OfBody': 'test-md5-2',
-        'Body': upload_payload,
-        'Attributes': {
-            'test-attribute': 'test-attribute-value'
-        }
-    }
-]}
-
-###### end of example payload
 
 class ExportEvent(Resource):
 
@@ -247,8 +205,9 @@ class ExportEvent(Resource):
             case = message['Body']
             case_data = case['data']
             program = case['formId']
-            uuid = case['data'].get('meta/instanceID')[-11:]
-            event_id = uuid_to_dhis2_uid(uuid)
+            date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
+            _uuid = case['data'].get('meta/instanceID')[-11:]
+            event_id = uuid_to_dhis2_uid(_uuid)
             data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                            case['data'].items()]
             country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
@@ -256,8 +215,8 @@ class ExportEvent(Resource):
                 'event': event_id,
                 'program': Dhis2CodesToIdsCache.get_program_id(program),
                 'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-                'eventDate': '2017-09-12',
-                'completedDate': '2017-09-13',
+                'eventDate': date,
+                'completedDate': date,
                 'dataValues': data_values,
                 'status': 'COMPLETED'
             }
@@ -297,16 +256,14 @@ class MeerkatCache():
         return MeerkatCache.get_and_cache_value('device', deviceid)
 
     @staticmethod
+    @backoff.on_exception(backoff.expo, JSONDecodeError, max_tries=3, max_value=1)
     def get_and_cache_value(resource_name, deviceid):
         cache = MeerkatCache.caches[resource_name]
         if not cache.get(deviceid):
             url = "{}/{}/{}".format(api_url, resource_name, deviceid)
             req = requests.get(url)
-            try:
-                country_location_id = req.json().get('country_location_id')
-                cache[deviceid] = country_location_id
-            except JSONDecodeError:
-                logger.error("Failed to parse response for url: {}\n".format(url))
+            country_location_id = req.json().get('country_location_id')
+            cache[deviceid] = country_location_id
         return cache.get(deviceid)
 
 
