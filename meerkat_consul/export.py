@@ -8,7 +8,7 @@ from flask_restful import abort, Resource, reqparse
 
 from meerkat_consul import logger, api_url, app
 from meerkat_consul.authenticate import headers
-from meerkat_consul.decorators import get, post, put
+from meerkat_consul.decorators import get, post, put, async
 from meerkat_consul.dhis2 import NewIdsProvider
 
 __codes_to_ids = {}
@@ -235,7 +235,9 @@ messages = {'Messages': [
 ###### end of example payload
 
 class ExportEvent(Resource):
+
     def post(self):
+        logger.debug("Starting event export.")
         event_payload_array = []
         try:
             json_request = json.loads(reqparse.request.get_json())
@@ -249,25 +251,27 @@ class ExportEvent(Resource):
             event_id = uuid_to_dhis2_uid(uuid)
             data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                            case['data'].items()]
-            # logger.info("Creating event with id %s", event_id)
-            location_req = requests.get("{}/device/{}".format(api_url, case_data['deviceid']))
-            country_location_id = location_req.json().get('country_location_id')
+            country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
             event_payload = {
                 'event': event_id,
                 'program': Dhis2CodesToIdsCache.get_program_id(program),
                 'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-                'eventDate': '1970-01-01',
+                'eventDate': '2017-09-12',
                 'completedDate': '2017-09-13',
                 'dataValues': data_values,
                 'status': 'COMPLETED'
             }
             event_payload_array.append(event_payload)
         events_payload = {"events": event_payload_array}
-        event_res = post("{}events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
-                         data=json.dumps(events_payload))
-        logger.info("Send batch of events with status: %d", event_res.status_code)
-        logger.info(event_res.json().get('message'))
-        return {"message": "Sending event batch finished successfully"}
+        post_events(events_payload)
+        return {"message": "Sending event batch finished successfully"}, 202
+
+@async
+def post_events(events_payload):
+    event_res = post("{}events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
+                     data=json.dumps(events_payload))
+    logger.info("Send batch of events with status: %d", event_res.status_code)
+    logger.debug(event_res.json().get('message'))
 
 
 def uuid_to_dhis2_uid(uuid):
@@ -284,6 +288,26 @@ def uuid_to_dhis2_uid(uuid):
     if result[0].isdigit():
         result = 'X' + result[1:]
     return result
+
+class MeerkatCache():
+    caches = defaultdict(dict)
+
+    @staticmethod
+    def get_location_from_deviceid(deviceid):
+        return MeerkatCache.get_and_cache_value('device', deviceid)
+
+    @staticmethod
+    def get_and_cache_value(resource_name, deviceid):
+        cache = MeerkatCache.caches[resource_name]
+        if not cache.get(deviceid):
+            url = "{}/{}/{}".format(api_url, resource_name, deviceid)
+            req = requests.get(url)
+            try:
+                country_location_id = req.json().get('country_location_id')
+                cache[deviceid] = country_location_id
+            except JSONDecodeError:
+                logger.error("Failed to parse response for url: {}\n".format(url))
+        return cache.get(deviceid)
 
 
 class Dhis2CodesToIdsCache():
