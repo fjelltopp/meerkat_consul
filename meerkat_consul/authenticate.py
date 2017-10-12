@@ -22,7 +22,8 @@ def retry_message(i):
                       max_value=30)
 @backoff.on_predicate(backoff.expo,
                       lambda x: x == '',
-                      max_tries=7)
+                      max_tries=10,
+                      max_value=30)
 def get_token():
     return authenticate('root', 'password')
 
