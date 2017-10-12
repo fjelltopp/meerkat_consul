@@ -1,5 +1,5 @@
-import threading
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
 from json import JSONDecodeError
 from time import time
@@ -74,6 +74,7 @@ def __check_if_response_is_ok(response):
 
 
 tasks = {}
+executor = ThreadPoolExecutor(max_workers=10)
 
 def async(f):
     """
@@ -82,7 +83,7 @@ def async(f):
     """
     @wraps(f)
     def wrapped(*args, **kwargs):
-        def task(app, environ, current_user_nickname):
+        def task(app, environ):
             # Create a request context similar to that of the original request
             # so that the task can have access to flask.g, flask.request, etc.
             with app.request_context(environ):
@@ -106,13 +107,8 @@ def async(f):
         id = uuid.uuid4().hex
 
         # Record the task, and then launch it
-        tasks[id] = {'task': threading.Thread(
-            target=task, args=(current_app._get_current_object(),
-                               request.environ, 'consul'))}
         logger.info("Starting background tasks with id: {}".format(id))
-        tasks[id]['task'].start()
+        tasks[id] = {'task': executor.submit(task, current_app._get_current_object(), request.environ)}
 
-        # Return a 202 response, with a link that the client can use to
-        # obtain task status
         return '', 202, {'Location': id}
     return wrapped
