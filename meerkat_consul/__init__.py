@@ -10,7 +10,6 @@ app = Flask(__name__)
 app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
 api = Api(app)
 
-
 logger = logging.getLogger("meerkat_consul")
 if not logger.handlers:
     logging_format = app.config['LOGGING_FORMAT']
@@ -29,9 +28,12 @@ if not logger.handlers:
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
+
 @backoff.on_predicate(backoff.expo, max_tries=8, max_value=30)
+@backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_tries=8, max_value=30)
 def wait_for_api():
     return requests.get(api_url).text
+
 
 wait_for_api()
 
@@ -41,9 +43,11 @@ api.add_resource(ExportLocationTree, "/dhis2/export/locationTree")
 api.add_resource(ExportFormFields, "/dhis2/export/formFields")
 api.add_resource(ExportEvent, "/dhis2/export/events")
 
+
 @app.route('/')
 def root():
     return '{"name":"meerkat_consul"}'
+
 
 if __name__ == '__main__':
     # from meerkat_consul.export import ExportFormFields, ExportLocationTree
