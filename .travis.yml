@@ -4,11 +4,11 @@ python:
 env:
   global:
   - CONFIG_OBJECT=config.Testing
-  - MEERKAT_AUTH_SETTINGS=meerkat_libs/meerkat_libs/auth_client/sample_auth.cfg
+  - MEERKAT_AUTH_SETTINGS="${TRAVIS_BUILD_DIR}/meerkat_libs/meerkat_libs/auth_client/dev_auth_config.py"
   - MEERKAT_API_URL=http://nginx/api
 install:
 - pip install -r requirements.txt
-- git clone https://github.com/meerkat-code/meerkat_libs.git
+- git clone --branch development --single-branch https://github.com/meerkat-code/meerkat_libs.git
 - cd meerkat_libs
 - pip install .
 - cd ../
