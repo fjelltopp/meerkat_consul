@@ -14,7 +14,7 @@ class NewIdsProvider:
         return self.ids.pop()
 
     def __get_dhis2_ids(self, n=100):
-        response = get("{}system/id.json?limit={}".format(self.dhis2_api_url, n), headers=self.headers).json()
+        response = get("{}/system/id.json?limit={}".format(self.dhis2_api_url, n), headers=self.headers).json()
         result = response.get('codes', [])
         if not result:
             logger.error("Could not get ids from DHIS2.")

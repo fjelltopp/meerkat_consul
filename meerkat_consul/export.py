@@ -100,8 +100,7 @@ class ExportFormFields(Resource):
             for field_name in field_names:
                 if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
                     self.__update_data_elements(field_name)
-
-            rv = get("{}programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+            rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
             programs = rv.json().get('programs', [])
             program_payload = {
                 'name': form_name,
@@ -113,7 +112,7 @@ class ExportFormFields(Resource):
                 # Update organisations
                 program_id = programs[0]["id"]
                 program_payload["id"] = program_id
-                req = get("{}programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
+                req = get("{}/programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
                 old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
 
                 organisations = list(
@@ -121,7 +120,7 @@ class ExportFormFields(Resource):
                 program_payload["organisationUnits"] = [{"id": x} for x in organisations]
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
-                req = put("{}programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
+                req = put("{}/programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
                 logger.info("Updated program %s (id:%s) with status %d", form_name, program_id, req.status_code)
 
             else:
@@ -134,13 +133,13 @@ class ExportFormFields(Resource):
                 program_payload["organisationUnits"] = [{"id": x} for x in organisations]
                 payload_json = json.dumps(program_payload)
                 # TODO: IDSchemes doesn't seem to work here
-                req = post("{}programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
+                req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
                 logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
             # Update data elements
             data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
                                  field_names]
             # Update data elements
-            stages = get("{}programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
+            stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
                          headers=dhis2_headers).json()
             stage_payload = {
                 "name": form_name,
@@ -153,14 +152,14 @@ class ExportFormFields(Resource):
             if stages.get("programStages"):
                 stage_id = stages.get("programStages")[0]["id"]
                 json_stage_payload = json.dumps(stage_payload)
-                res = put("{}programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload,
+                res = put("{}/programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload,
                           headers=dhis2_headers)
                 logger.info("Updated stage for program %s with status %d", form_name, res.status_code)
             else:
                 stage_id = dhis2_ids.pop()
                 stage_payload["id"] = stage_id
                 json_stage_payload = json.dumps(stage_payload)
-                res = post("{}programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
+                res = post("{}/programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
                 logger.info("Created stage for program %s with status %d", form_name, res.status_code)
 
         return {"message": "Exporting form metadata finished successfully"}
@@ -169,7 +168,7 @@ class ExportFormFields(Resource):
     def get_all_operational_clinics_as_dhis2_ids():
         locations = requests.get("{}/locations".format(api_url), headers=headers).json()
         for location in locations.values():
-            if location.get('case_report') != 0 and location.get('level') == 'clinic':
+            if location.get('case_report') != 0 and location.get('level') == 'clinic' and location.get('country_location_id'):
                 yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
 
     @staticmethod
@@ -184,7 +183,7 @@ class ExportFormFields(Resource):
             'valueType': 'TEXT',
             'aggregationType': 'NONE'
         })
-        post_res = post("{}dataElements".format(dhis2_api_url), data=json_payload, headers=dhis2_headers)
+        post_res = post("{}/dataElements".format(dhis2_api_url), data=json_payload, headers=dhis2_headers)
         logger.info("Created data element \"{}\" with status {!r}".format(key, post_res.status_code))
         return id
 
