@@ -242,14 +242,6 @@ def uuid_to_dhis2_uid(uuid):
         result = 'X' + result[1:]
     return result
 
-
-def uuid_to_dhis2_uid(uuid):
-    result = uuid[-11:]
-    # DHIS2 uid needs to start with a character
-    if result[0].isdigit():
-        result = 'X' + result[1:]
-    return result
-
 class MeerkatCache():
     caches = defaultdict(dict)
 
