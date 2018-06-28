@@ -6,7 +6,7 @@ import backoff as backoff
 from datetime import datetime
 import requests
 from flask import Blueprint, jsonify
-from flask_restful import abort, Resource, reqparse
+from flask_restful import abort, reqparse
 
 from meerkat_consul import logger, api_url, app
 from meerkat_consul.authenticate import headers, refresh_auth_token
@@ -104,72 +104,77 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
     for form_name, field_names in forms.items():
-        for field_name in field_names:
-            if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
-                __update_data_elements(field_name)
-        rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
-        programs = rv.json().get('programs', [])
-        program_payload = {
-            'name': form_name,
-            'shortName': form_name,
-            'code': form_name,
-            'programType': 'WITHOUT_REGISTRATION'
-        }
-        if programs:
-            # Update organisations
-            program_id = programs[0]["id"]
-            program_payload["id"] = program_id
-            req = get("{}/programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
-            old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
-
-            organisations = list(
-                set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
-            program_payload["organisationUnits"] = [{"id": x} for x in organisations]
-            payload_json = json.dumps(program_payload)
-            # TODO: IDSchemes doesn't seem to work here
-            req = put("{}/programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
-            logger.info("Updated program %s (id:%s) with status %d", form_name, program_id, req.status_code)
-
-        else:
-            program_id = dhis2_ids.pop()
-            program_payload["id"] = program_id
-            old_organisation_ids = []
-
-            organisations = list(
-                set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
-            program_payload["organisationUnits"] = [{"id": x} for x in organisations]
-            payload_json = json.dumps(program_payload)
-            # TODO: IDSchemes doesn't seem to work here
-            req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
-            logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
-        # Update data elements
-        data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
-                             field_names]
-        # Update data elements
-        stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
-                     headers=dhis2_headers).json()
-        stage_payload = {
-            "name": form_name,
-            "code": form_name,
-            "program": {
-                "id": program_id
-            },
-            "programStageDataElements": data_element_keys
-        }
-        if stages.get("programStages"):
-            stage_id = stages.get("programStages")[0]["id"]
-            json_stage_payload = json.dumps(stage_payload)
-            res = put("{}/programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload,
-                      headers=dhis2_headers)
-            logger.info("Updated stage for program %s with status %d", form_name, res.status_code)
-        else:
-            stage_id = dhis2_ids.pop()
-            stage_payload["id"] = stage_id
-            json_stage_payload = json.dumps(stage_payload)
-            res = post("{}/programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
-            logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+        __update_dhis2_program(field_names, form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
+
+
+def __update_dhis2_program(field_names, form_name):
+    for field_name in field_names:
+        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
+            __update_data_elements(field_name)
+    rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+    programs = rv.json().get('programs', [])
+    program_payload = {
+        'name': form_name,
+        'shortName': form_name,
+        'code': form_name,
+        'programType': 'WITHOUT_REGISTRATION'
+    }
+    if programs:
+        # Update organisations
+        program_id = programs[0]["id"]
+        program_payload["id"] = program_id
+        req = get("{}/programs/{}".format(dhis2_api_url, program_id), headers=dhis2_headers)
+        old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
+
+        organisations = list(
+            set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
+        program_payload["organisationUnits"] = [{"id": x} for x in organisations]
+        payload_json = json.dumps(program_payload)
+        # TODO: IDSchemes doesn't seem to work here
+        req = put("{}/programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
+        logger.info("Updated program %s (id:%s) with status %d", form_name, program_id, req.status_code)
+
+    else:
+        program_id = dhis2_ids.pop()
+        program_payload["id"] = program_id
+        old_organisation_ids = []
+
+        organisations = list(
+            set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
+        program_payload["organisationUnits"] = [{"id": x} for x in organisations]
+        payload_json = json.dumps(program_payload)
+        # TODO: IDSchemes doesn't seem to work here
+        req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
+        logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
+    # Update data elements
+    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
+                         field_names]
+    # Update data elements
+    stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
+                 headers=dhis2_headers).json()
+    stage_payload = {
+        "name": form_name,
+        "code": form_name,
+        "program": {
+            "id": program_id
+        },
+        "programStageDataElements": data_element_keys
+    }
+    if stages.get("programStages"):
+        stage_id = stages.get("programStages")[0]["id"]
+        json_stage_payload = json.dumps(stage_payload)
+        res = put("{}/programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload,
+                  headers=dhis2_headers)
+        logger.info("Updated stage for program %s with status %d", form_name, res.status_code)
+    else:
+        stage_id = dhis2_ids.pop()
+        stage_payload["id"] = stage_id
+        json_stage_payload = json.dumps(stage_payload)
+        res = post("{}/programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
+        logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+
 
 def get_all_operational_clinics_as_dhis2_ids():
     locations = requests.get("{}/locations".format(api_url), headers=headers).json()
@@ -223,6 +228,7 @@ def events():
             'status': 'COMPLETED'
         }
         event_payload_array.append(event_payload)
+        __update_dhis2_program(case_data.keys(), program)
     events_payload = {"events": event_payload_array}
     post_events(events_payload)
     return jsonify({"message": "Sending event batch finished successfully"}), 202
