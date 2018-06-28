@@ -8,7 +8,6 @@ from flask_restful import Api
 
 app = Flask(__name__)
 app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
-api = Api(app)
 
 logger = logging.getLogger("meerkat_consul")
 if not logger.handlers:
@@ -37,11 +36,8 @@ def wait_for_api():
 
 wait_for_api()
 
-from meerkat_consul.export import ExportLocationTree, ExportFormFields, ExportEvent
-
-api.add_resource(ExportLocationTree, "/dhis2/export/locationTree")
-api.add_resource(ExportFormFields, "/dhis2/export/formFields")
-api.add_resource(ExportEvent, "/dhis2/export/events")
+from meerkat_consul.export import dhis2_export
+app.register_blueprint(dhis2_export)
 
 
 @app.route('/')
