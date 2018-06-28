@@ -9,7 +9,7 @@ from flask import Blueprint, jsonify
 from flask_restful import abort, Resource, reqparse
 
 from meerkat_consul import logger, api_url, app
-from meerkat_consul.authenticate import headers
+from meerkat_consul.authenticate import headers, refresh_auth_token
 from meerkat_consul.decorators import get, post, put, async
 from meerkat_consul.dhis2 import NewIdsProvider
 
@@ -30,6 +30,7 @@ def hello():
     return jsonify({"message": "HELLO!"})
 
 @dhis2_export.route('/locationTree', methods=['POST'])
+@refresh_auth_token
 def locationTree():
     location_tree = requests.get("{}/locationtree".format(api_url), headers=headers)
     country = location_tree.json()
@@ -98,6 +99,7 @@ def __create_new_dhis2_organisation(location_details, dhis2_parent_id):
     return uid
 
 @dhis2_export.route("/formFields", methods=['POST'])
+@refresh_auth_token
 def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")

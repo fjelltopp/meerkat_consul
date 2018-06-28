@@ -14,7 +14,6 @@ exec(compile(open(filename, "rb").read(), filename, 'exec'))
 def retry_message(i):
     logging.info("Failed to authenticate. Retrying in " + str(i))
 
-
 @backoff.on_exception(backoff.expo,
                       requests.exceptions.RequestException,
                       on_backoff=retry_message,
@@ -27,6 +26,15 @@ def retry_message(i):
 def get_token():
     return authenticate('root', 'password')
 
+
+def refresh_auth_token(f):
+    global headers
+    if not app.config['TESTING']:
+        headers = {'Authorization': JWT_HEADER_PREFIX + get_token()}
+    else:
+        headers = {'Authorization': JWT_HEADER_PREFIX + 'TESTING'}
+
+    return f
 
 if not app.config['TESTING']:
     headers = {'Authorization': JWT_HEADER_PREFIX + get_token()}
