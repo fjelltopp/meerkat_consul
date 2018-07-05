@@ -228,14 +228,13 @@ def events():
             'status': 'COMPLETED'
         }
         event_payload_array.append(event_payload)
-        __update_dhis2_program(case_data.keys(), program)
     events_payload = {"events": event_payload_array}
     post_events(events_payload)
     return jsonify({"message": "Sending event batch finished successfully"}), 202
 
 @async
 def post_events(events_payload):
-    event_res = post("{}events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
+    event_res = post("{}/events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
                      data=json.dumps(events_payload))
     logger.info("Send batch of events with status: %d", event_res.status_code)
     logger.debug(event_res.json().get('message'))
