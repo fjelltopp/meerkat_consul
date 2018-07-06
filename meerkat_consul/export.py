@@ -232,6 +232,7 @@ def events():
     post_events(events_payload)
     return jsonify({"message": "Sending event batch finished successfully"}), 202
 
+
 @dhis2_export.route("/data_set", methods=['POST'])
 def data_set():
     logger.debug("Starting data set export")
@@ -245,7 +246,6 @@ def data_set():
         data_entry_content = data_entry['data']
         data_set_code = data_entry['formId']
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-        _uuid = data_entry['data'].get('meta/instanceID')[-11:]
         data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                        data_entry['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
@@ -262,12 +262,14 @@ def data_set():
     post_data_set(data_sets_payload)
     return jsonify({"message": "Sending data entry batch finished successfully"}), 202
 
+
 @async
 def post_events(events_payload):
     event_res = post("{}/events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
                      data=json.dumps(events_payload))
     logger.info("Send batch of events with status: %d", event_res.status_code)
     logger.debug(event_res.json().get('message'))
+
 
 @async
 def post_data_set(data_sets_payload):
@@ -276,12 +278,14 @@ def post_data_set(data_sets_payload):
     logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
     logger.debug(data_set_res.json().get('message'))
 
+
 def uuid_to_dhis2_uid(uuid):
     result = uuid[-11:]
     # DHIS2 uid needs to start with a character
     if result[0].isdigit():
         result = 'X' + result[1:]
     return result
+
 
 def get_period_from_date(input_date, formId):
     period = dhis2_config.get('data_set_peroid', {}).get(formId, 'daily')
@@ -291,6 +295,7 @@ def get_period_from_date(input_date, formId):
         return ret
     else:
         return
+
 
 class MeerkatCache():
     caches = defaultdict(dict)
