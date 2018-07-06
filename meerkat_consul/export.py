@@ -271,8 +271,8 @@ def post_events(events_payload):
 
 @async
 def post_data_set(data_sets_payload):
-    data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
-                     data=json.dumps(data_sets_payload))
+    data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
+                        headers=dhis2_headers, data=json.dumps(data_sets_payload))
     logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
     logger.debug(data_set_res.json().get('message'))
 
@@ -316,6 +316,10 @@ class Dhis2CodesToIdsCache():
     @staticmethod
     def get_program_id(program_code):
         return Dhis2CodesToIdsCache.get_and_cache_value('programs', program_code)
+
+    @staticmethod
+    def get_data_set_id(data_set):
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataValueSet', data_set)
 
     @staticmethod
     def has_data_element_with_code(dhis2_code):
