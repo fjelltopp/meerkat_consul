@@ -283,15 +283,14 @@ def uuid_to_dhis2_uid(uuid):
         result = 'X' + result[1:]
     return result
 
-def get_period_from_date(date, formId):
+def get_period_from_date(input_date, formId):
     period = dhis2_config.get('data_set_peroid', {}).get(formId, 'daily')
 
     if period == 'daily':
-        result = '20180101'
+        ret = str(input_date.year) + str(input_date.month) + str(input_date.day)
+        return ret
     else:
         return
-
-    return result
 
 class MeerkatCache():
     caches = defaultdict(dict)
