@@ -232,6 +232,36 @@ def events():
     post_events(events_payload)
     return jsonify({"message": "Sending event batch finished successfully"}), 202
 
+@dhis2_export.route("/data_set", methods=['POST'])
+def data_set():
+    logger.debug("Starting data set export")
+    data_set_payload_array = []
+    try:
+        json_request = json.loads(reqparse.request.get_json())
+    except JSONDecodeError:
+        abort(400, messages="Unable to parse posted JSON")
+    for message in json_request['Messages']:
+        data_entry = message['Body']
+        data_entry_content = data_entry['data']
+        program = data_entry['formId']
+        date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
+        _uuid = data_entry['data'].get('meta/instanceID')[-11:]
+        event_id = uuid_to_dhis2_uid(_uuid)
+        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
+                       data_entry['data'].items()]
+        country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
+        dateset_payload = {
+            'dataSet': "dataset_id",
+            'completeDate': date,
+            'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
+            'attributeOptionCombo': "aoc_id",
+            'dataValues': data_values
+        }
+        data_set_payload_array.append(dateset_payload)
+    data_sets_payload = {"data_entries": data_set_payload_array}
+    post_data_set(data_sets_payload)
+    return jsonify({"message": "Sending data entry batch finished successfully"}), 202
+
 @async
 def post_events(events_payload):
     event_res = post("{}/events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
@@ -239,6 +269,12 @@ def post_events(events_payload):
     logger.info("Send batch of events with status: %d", event_res.status_code)
     logger.debug(event_res.json().get('message'))
 
+@async
+def post_data_set(data_sets_payload):
+    data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
+                     data=json.dumps(data_sets_payload))
+    logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
+    logger.debug(data_set_res.json().get('message'))
 
 def uuid_to_dhis2_uid(uuid):
     result = uuid[-11:]
