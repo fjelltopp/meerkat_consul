@@ -243,21 +243,21 @@ def data_set():
     for message in json_request['Messages']:
         data_entry = message['Body']
         data_entry_content = data_entry['data']
-        program = data_entry['formId']
+        data_set_code = data_entry['formId']
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
         _uuid = data_entry['data'].get('meta/instanceID')[-11:]
-        event_id = uuid_to_dhis2_uid(_uuid)
         data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                        data_entry['data'].items()]
-        country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
-        dateset_payload = {
-            'dataSet': "dataset_id",
+        country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
+        data_set_payload = {
+            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(data_set_code),
             'completeDate': date,
+            'period': get_period_from_date(date, data_entry['formId']),
             'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
             'attributeOptionCombo': "aoc_id",
             'dataValues': data_values
         }
-        data_set_payload_array.append(dateset_payload)
+        data_set_payload_array.append(data_set_payload)
     data_sets_payload = {"data_entries": data_set_payload_array}
     post_data_set(data_sets_payload)
     return jsonify({"message": "Sending data entry batch finished successfully"}), 202
@@ -281,6 +281,16 @@ def uuid_to_dhis2_uid(uuid):
     # DHIS2 uid needs to start with a character
     if result[0].isdigit():
         result = 'X' + result[1:]
+    return result
+
+def get_period_from_date(date, formId):
+    period = dhis2_config.get('data_set_peroid', {}).get(formId, 'daily')
+
+    if period == 'daily':
+        result = '20180101'
+    else:
+        return
+
     return result
 
 class MeerkatCache():
@@ -319,7 +329,7 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_data_set_id(data_set):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataValueSet', data_set)
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', data_set)
 
     @staticmethod
     def has_data_element_with_code(dhis2_code):
