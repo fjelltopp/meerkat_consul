@@ -9,12 +9,12 @@ class Config(object):
     COUNTRY_LOCATION_ID = 1
 
     DHIS2_CONFIG = {
-        "url": "http://dhis2-web:8080",
-        "apiResource": "/api/26/",
-        "credentials": ('admin', 'district'),
+        "url": "http://172.17.0.1:8085",
+        "apiResource": "/api/27",
+        "credentials": ('senyoni', 'admin'),
         "headers": {
             "Content-Type": "application/json",
-            "Authorization": "Basic YWRtaW46ZGlzdHJpY3Q="
+            "Authorization": "Basic c2VueW9uaTphZG1pbg=="
         }
     }
 
