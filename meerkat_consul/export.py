@@ -105,6 +105,7 @@ def export_form_fields():
     logger.info(f"Forms: {forms}")
     for form_name, field_names in forms.items():
         __update_dhis2_program(field_names, form_name)
+        __update_dhis2_dataset(field_names, form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -174,6 +175,49 @@ def __update_dhis2_program(field_names, form_name):
         json_stage_payload = json.dumps(stage_payload)
         res = post("{}/programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
         logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+
+
+def __update_dhis2_dataset(field_names, form_name):
+    for field_name in field_names:
+        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
+            __update_data_elements(field_name)
+    rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+    datasets = rv.json().get('dataSets', [])
+    dataset_payload = {
+        'name': form_name,
+        'shortName': form_name,
+        'code': form_name
+    }
+    if datasets:
+        # Update organisations
+        dataset_id = datasets[0]["id"]
+        dataset_payload["id"] = dataset_id
+        req = get("{}/dataSets/{}".format(dhis2_api_url, dataset_id), headers=dhis2_headers)
+        old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
+
+        organisations = list(
+            set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
+        dataset_payload["organisationUnits"] = [{"id": x} for x in organisations]
+        payload_json = json.dumps(dataset_payload)
+        # TODO: IDSchemes doesn't seem to work here
+        req = put("{}/dataSets/{}".format(dhis2_api_url, dataset_id), data=payload_json, headers=dhis2_headers)
+        logger.info("Updated data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
+
+    else:
+        dataset_id = dhis2_ids.pop()
+        dataset_payload["id"] = dataset_id
+        old_organisation_ids = []
+
+        organisations = list(
+            set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
+        dataset_payload["organisationUnits"] = [{"id": x} for x in organisations]
+        payload_json = json.dumps(dataset_payload)
+        # TODO: IDSchemes doesn't seem to work here
+        req = post("{}/dataSets".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
+        logger.info("Created data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
+    # Update data elements
+    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
+                         field_names]
 
 
 def get_all_operational_clinics_as_dhis2_ids():
