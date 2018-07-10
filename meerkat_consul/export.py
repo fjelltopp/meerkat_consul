@@ -103,9 +103,14 @@ def __create_new_dhis2_organisation(location_details, dhis2_parent_id):
 def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
+
+    form_config = {"new_som_case": "event", "new_som_register": "data_set"}
+
     for form_name, field_names in forms.items():
-        __update_dhis2_program(field_names, form_name)
-        #__update_dhis2_dataset(field_names, form_name)
+        if form_config.get(form_name) == "event":
+            __update_dhis2_program(field_names, form_name)
+        elif form_config.get(form_name) == "data_set":
+            __update_dhis2_dataset(field_names, form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -180,13 +185,14 @@ def __update_dhis2_program(field_names, form_name):
 def __update_dhis2_dataset(field_names, form_name):
     for field_name in field_names:
         if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
-            __update_data_elements(field_name)
-    rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+            __update_data_elements(field_name, "AGGREGATE")
+    rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
     datasets = rv.json().get('dataSets', [])
     dataset_payload = {
         'name': form_name,
         'shortName': form_name,
-        'code': form_name
+        'code': form_name,
+        'periodType': "Daily"
     }
     if datasets:
         # Update organisations
@@ -226,16 +232,21 @@ def get_all_operational_clinics_as_dhis2_ids():
         if location.get('case_report') != 0 and location.get('level') == 'clinic' and location.get('country_location_id'):
             yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
 
-def __update_data_elements(key):
+def __update_data_elements(key, domainType="TRACKER"):
     id = dhis2_ids.pop()
+    if domainType == "AGGREGATE":
+        aggregationType = "SUM"
+    else:
+        aggregationType = "NONE"
+        
     json_payload = json.dumps({
         'id': id,
         'name': key,
         'shortName': key,
         'code': key,
-        'domainType': 'TRACKER',
+        'domainType': domainType,
         'valueType': 'TEXT',
-        'aggregationType': 'NONE'
+        'aggregationType': aggregationType
     })
     post_res = post("{}/dataElements".format(dhis2_api_url), data=json_payload, headers=dhis2_headers)
     logger.info("Created data element \"{}\" with status {!r}".format(key, post_res.status_code))
