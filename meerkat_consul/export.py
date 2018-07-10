@@ -105,7 +105,7 @@ def export_form_fields():
     logger.info(f"Forms: {forms}")
     for form_name, field_names in forms.items():
         __update_dhis2_program(field_names, form_name)
-        __update_dhis2_dataset(field_names, form_name)
+        #__update_dhis2_dataset(field_names, form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -389,7 +389,7 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_and_cache_value(dhis2_resource, dhis2_code):
-        cache = Dhis2CodesToIdsCache.caches[dhis2_resource]
+        cache = Dhis2CodesToIdsCache.caches.get(dhis2_resource, {})
         if not cache.get(dhis2_code):
             logger.info("{} with code {} not found in cache.".format(dhis2_resource, dhis2_code))
             rv = get("{url}/{resource_path}?filter=code:eq:{code}".format(
@@ -397,7 +397,7 @@ class Dhis2CodesToIdsCache():
                 resource_path=dhis2_resource,
                 code=dhis2_code),
                 headers=dhis2_headers)
-            dhis2_objects = rv.json().get(dhis2_resource)
+            dhis2_objects = rv.json().get(dhis2_resource, [])
             if len(dhis2_objects) == 0:
                 raise ValueError("{} with code {} not found in DHIS2".format(dhis2_resource, dhis2_code))
             elif len(dhis2_objects) != 1:
