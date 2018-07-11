@@ -9,6 +9,7 @@ from flask import Blueprint, jsonify
 from flask_restful import abort, reqparse
 
 from meerkat_consul import logger, api_url, app
+from meerkat_consul.auth_client import auth
 from meerkat_consul.authenticate import headers, refresh_auth_token
 from meerkat_consul.decorators import get, post, put, async
 from meerkat_consul.dhis2 import NewIdsProvider
@@ -26,10 +27,12 @@ COUNTRY_LOCATION_ID = app.config['COUNTRY_LOCATION_ID']
 dhis2_export = Blueprint('export', __name__, url_prefix='/dhis2/export')
 
 @dhis2_export.route('/hello')
+@auth.authorise()
 def hello():
     return jsonify({"message": "HELLO!"})
 
 @dhis2_export.route('/locationTree', methods=['POST'])
+@auth.authorise()
 @refresh_auth_token
 def locationTree():
     location_tree = requests.get("{}/locationtree".format(api_url), headers=headers)
@@ -99,6 +102,7 @@ def __create_new_dhis2_organisation(location_details, dhis2_parent_id):
     return uid
 
 @dhis2_export.route("/formFields", methods=['POST'])
+@auth.authorise()
 @refresh_auth_token
 def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
@@ -201,6 +205,7 @@ def meerkat_to_dhis2_date_format(meerkat_date):
     return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y-%m-%d")
 
 @dhis2_export.route("/events", methods=['POST'])
+@auth.authorise()
 def events():
     logger.debug("Starting event export.")
     event_payload_array = []
@@ -300,7 +305,7 @@ class Dhis2CodesToIdsCache():
                 code=dhis2_code),
                 headers=dhis2_headers)
             dhis2_objects = rv.json().get(dhis2_resource)
-            if len(dhis2_objects) == 0:
+            if not dhis2_objects or len(dhis2_objects) == 0:
                 raise ValueError("{} with code {} not found in DHIS2".format(dhis2_resource, dhis2_code))
             elif len(dhis2_objects) != 1:
                 logger.error("Found more then one dhis2 {} for code: {}".format(dhis2_resource, dhis2_code))
