@@ -51,10 +51,12 @@ def locationTree():
 
     return jsonify({"message": "Exporting location tree finished successfully"})
 
+
 def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
     if len(dhis2_country_details) > 1:
         logger.error("Received more than one organisation for given code: %s", dhis2_organisation_code)
         abort(500)
+
 
 def __populate_child_locations(dhis2_parent_id, locations):
     for location in locations:
@@ -67,6 +69,7 @@ def __populate_child_locations(dhis2_parent_id, locations):
 
         child_locations = location["nodes"]
         __populate_child_locations(id, child_locations)
+
 
 def __create_new_dhis2_organisation(location_details, dhis2_parent_id):
     name = location_details["name"]
@@ -183,9 +186,7 @@ def __update_dhis2_program(field_names, form_name):
 
 
 def __update_dhis2_dataset(field_names, form_name):
-    for field_name in field_names:
-        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
-            __update_data_elements(field_name, "AGGREGATE")
+
     rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
     datasets = rv.json().get('dataSets', [])
     dataset_payload = {
@@ -221,10 +222,22 @@ def __update_dhis2_dataset(field_names, form_name):
         # TODO: IDSchemes doesn't seem to work here
         req = post("{}/dataSets".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
-    # Update data elements
+
+    # Create data elements
+    for field_name in field_names:
+        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
+            __update_data_elements(field_name, "AGGREGATE")
+
+    # Connect data elements to data set
     data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
                          field_names]
 
+    dataset_payload['dataSetElements'] = data_element_keys
+    payload_json = json.dumps(dataset_payload)
+
+    res = put("{}/dataSets/{}".format(dhis2_api_url, dataset_id), data=payload_json,
+              headers=dhis2_headers)
+    logger.info("Updated data elements for data set %s with status %d", form_name, res.status_code)
 
 def get_all_operational_clinics_as_dhis2_ids():
     locations = requests.get("{}/locations".format(api_url), headers=headers).json()
@@ -238,7 +251,7 @@ def __update_data_elements(key, domainType="TRACKER"):
         aggregationType = "SUM"
     else:
         aggregationType = "NONE"
-        
+
     json_payload = json.dumps({
         'id': id,
         'name': key,
