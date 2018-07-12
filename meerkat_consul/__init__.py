@@ -4,10 +4,10 @@ import os
 import backoff as backoff
 import requests
 from flask import Flask
-from flask_restful import Api
 
 app = Flask(__name__)
 app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
+app.config.from_envvar('MEERKAT_CONSUL_SETTINGS')
 
 logger = logging.getLogger("meerkat_consul")
 if not logger.handlers:
