@@ -107,12 +107,15 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
 
-    form_config = {"new_som_case": "event", "new_som_register": "data_set"}
+    #form_config = {"new_som_case": "event", "new_som_register": "data_set"}
+    form_config = {"new_som_register": "data_set"}
 
     for form_name, field_names in forms.items():
         if form_config.get(form_name) == "event":
+            logger.info("Event form %s found", form_name)
             __update_dhis2_program(field_names, form_name)
         elif form_config.get(form_name) == "data_set":
+            logger.info("Data set form %s found", form_name)
             __update_dhis2_dataset(field_names, form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
@@ -202,6 +205,9 @@ def __update_dhis2_dataset(field_names, form_name):
         req = get("{}/dataSets/{}".format(dhis2_api_url, dataset_id), headers=dhis2_headers)
         old_organisation_ids = [x["id"] for x in req.json().get('organisationUnits', [])]
 
+        for id in old_organisation_ids:
+            logger.info("Found old organisationid %s: ", id)
+
         organisations = list(
             set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
         dataset_payload["organisationUnits"] = [{"id": x} for x in organisations]
@@ -232,12 +238,15 @@ def __update_dhis2_dataset(field_names, form_name):
     data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
                          field_names]
 
+    logger.info("Found %d relevant data elements", len(data_element_keys))
+
     dataset_payload['dataSetElements'] = data_element_keys
     payload_json = json.dumps(dataset_payload)
 
     res = put("{}/dataSets/{}".format(dhis2_api_url, dataset_id), data=payload_json,
               headers=dhis2_headers)
-    logger.info("Updated data elements for data set %s with status %d", form_name, res.status_code)
+    logger.info("Updated data elements for data set %s (id: %s) with status %d", form_name, dataset_id, res.status_code)
+
 
 def get_all_operational_clinics_as_dhis2_ids():
     locations = requests.get("{}/locations".format(api_url), headers=headers).json()
@@ -245,28 +254,35 @@ def get_all_operational_clinics_as_dhis2_ids():
         if location.get('case_report') != 0 and location.get('level') == 'clinic' and location.get('country_location_id'):
             yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
 
+
 def __update_data_elements(key, domainType="TRACKER"):
     id = dhis2_ids.pop()
-    if domainType == "AGGREGATE":
-        aggregationType = "SUM"
-    else:
-        aggregationType = "NONE"
 
-    json_payload = json.dumps({
+    json_payload = {
         'id': id,
         'name': key,
         'shortName': key,
         'code': key,
         'domainType': domainType,
-        'valueType': 'TEXT',
-        'aggregationType': aggregationType
-    })
-    post_res = post("{}/dataElements".format(dhis2_api_url), data=json_payload, headers=dhis2_headers)
+        'valueType': 'TEXT'
+    }
+
+    if domainType == "AGGREGATE":
+        json_payload['aggregationType'] = "NONE"
+        json_payload['categoryCombo'] = {"id": Dhis2CodesToIdsCache.get_category_combination_id('default')}
+    elif domainType == 'TRACKER':
+        json_payload['aggregationType'] = "NONE"
+
+    json_payload_flat = json.dumps(json_payload)
+
+    post_res = post("{}/dataElements".format(dhis2_api_url), data=json_payload_flat, headers=dhis2_headers)
     logger.info("Created data element \"{}\" with status {!r}".format(key, post_res.status_code))
     return id
 
+
 def meerkat_to_dhis2_date_format(meerkat_date):
     return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y-%m-%d")
+
 
 @dhis2_export.route("/events", methods=['POST'])
 def events():
@@ -402,6 +418,10 @@ class Dhis2CodesToIdsCache():
     @staticmethod
     def get_data_set_id(data_set):
         return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', data_set)
+
+    @staticmethod
+    def get_category_combination_id(category_combination):
+        return Dhis2CodesToIdsCache.get_and_cache_value('categoryCombos', category_combination)
 
     @staticmethod
     def has_data_element_with_code(dhis2_code):
