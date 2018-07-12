@@ -10,6 +10,10 @@ from meerkat_libs import authenticate
 filename = os.environ.get('MEERKAT_AUTH_SETTINGS')
 exec(compile(open(filename, "rb").read(), filename, 'exec'))
 
+CONSUL_AUTH_USERNAME = os.environ.get('CONSUL_AUTH_USERNAME', 'consul-dev-user')
+CONSUL_AUTH_PASSWORD = os.environ.get('CONSUL_AUTH_PASSWORD', 'password')
+consul_auth_token_ = ''
+
 
 def retry_message(i):
     logging.info("Failed to authenticate. Retrying in " + str(i))
@@ -24,7 +28,11 @@ def retry_message(i):
                       max_tries=10,
                       max_value=30)
 def get_token():
-    return authenticate('root', 'password')
+    global consul_auth_token_
+    consul_auth_token_ = authenticate(username=CONSUL_AUTH_USERNAME,
+                                      password=CONSUL_AUTH_PASSWORD,
+                                      current_token=consul_auth_token_)
+    return consul_auth_token_
 
 
 def refresh_auth_token(f):
