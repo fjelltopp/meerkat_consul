@@ -120,7 +120,7 @@ def export_form_fields():
             __update_dhis2_program(field_names, form_name)
         elif form_config.get(form_name) == "data_set":
             logger.info("Data set form %s found", form_name)
-            __update_dhis2_dataset(field_names, form_name)
+            __update_dhis2_dataset(forms[form_name], form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -323,6 +323,7 @@ def events():
 
 
 @dhis2_export.route("/data_set", methods=['POST'])
+@auth.authorise()
 def data_set():
     logger.debug("Starting data set export")
     data_set_payload_array = []
