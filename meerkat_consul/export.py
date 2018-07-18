@@ -111,8 +111,7 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
 
-    #form_config = {"new_som_case": "event", "new_som_register": "data_set"}
-    form_config = {"new_som_register": "data_set"}
+    form_config = {"new_som_case": "event", "new_som_register": "data_set"}
 
     for form_name, field_names in forms.items():
         if form_config.get(form_name) == "event":
@@ -120,7 +119,7 @@ def export_form_fields():
             __update_dhis2_program(field_names, form_name)
         elif form_config.get(form_name) == "data_set":
             logger.info("Data set form %s found", form_name)
-            __update_dhis2_dataset(forms[form_name], form_name)
+            __update_dhis2_dataset(field_names, form_name)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -235,7 +234,7 @@ def __update_dhis2_dataset(field_names, form_name):
 
     # Create data elements
     for field_name in field_names:
-        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
+        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name, "AGGREGATE"):
             __update_data_elements(field_name, "AGGREGATE")
 
     # Connect data elements to data set
@@ -259,27 +258,32 @@ def get_all_operational_clinics_as_dhis2_ids():
             yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
 
 
-def __update_data_elements(key, domainType="TRACKER"):
+def __update_data_elements(key, domain_type="TRACKER"):
     id = dhis2_ids.pop()
 
+    name_ = f"HOQM {key}"
     json_payload = {
         'id': id,
-        'name': key,
-        'shortName': key,
-        'code': key,
-        'domainType': domainType,
+        'code': f"{domain_type}_{key}",
+        'domain_type': domain_type,
         'valueType': 'TEXT'
     }
 
-    if domainType == "AGGREGATE":
+    if domain_type == "AGGREGATE":
         json_payload['aggregationType'] = "NONE"
         json_payload['categoryCombo'] = {"id": Dhis2CodesToIdsCache.get_category_combination_id('default')}
-    elif domainType == 'TRACKER':
+        json_payload['name'] = f"{name_} Daily Registry"
+        json_payload['shortName'] = f"{name_} Daily Registry"
+    elif domain_type == 'TRACKER':
         json_payload['aggregationType'] = "NONE"
+        json_payload['name'] = f"{name_} Case Form"
+        json_payload['shortName'] = f"{name_} Case Form"
 
     json_payload_flat = json.dumps(json_payload)
 
     post_res = post("{}/dataElements".format(dhis2_api_url), data=json_payload_flat, headers=dhis2_headers)
+    if post_res.status_code >= 300:
+        abort(500, message=f"Unable to create data element {key} - {domain_type}")
     logger.info("Created data element \"{}\" with status {!r}".format(key, post_res.status_code))
     return id
 
@@ -430,8 +434,9 @@ class Dhis2CodesToIdsCache():
         return Dhis2CodesToIdsCache.get_and_cache_value('categoryCombos', category_combination)
 
     @staticmethod
-    def has_data_element_with_code(dhis2_code):
+    def has_data_element_with_code(dhis2_code_suffix, domain_type="TRACKER"):
         try:
+            dhis2_code = f"{domain_type}_{dhis2_code_suffix}"
             Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
         except ValueError:
             return False
@@ -439,7 +444,7 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_and_cache_value(dhis2_resource, dhis2_code):
-        cache = Dhis2CodesToIdsCache.caches.get(dhis2_resource, {})
+        cache = Dhis2CodesToIdsCache.caches[dhis2_resource]
         if not cache.get(dhis2_code):
             logger.info("{} with code {} not found in cache.".format(dhis2_resource, dhis2_code))
             rv = get("{url}/{resource_path}?filter=code:eq:{code}".format(
@@ -454,12 +459,3 @@ class Dhis2CodesToIdsCache():
                 logger.error("Found more then one dhis2 {} for code: {}".format(dhis2_resource, dhis2_code))
             cache[dhis2_code] = dhis2_objects[0]["id"]
         return cache.get(dhis2_code)
-
-    @staticmethod
-    def has_data_element_with_code(dhis2_code):
-        try:
-            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
-        except ValueError:
-            return False
-        return True
-
