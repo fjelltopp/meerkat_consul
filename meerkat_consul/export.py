@@ -262,10 +262,12 @@ def __update_data_elements(key, domain_type="TRACKER"):
     id = dhis2_ids.pop()
 
     name_ = f"HOQM {key}"
+    dhis2_valid_short_name_ = key[-50:]
     json_payload = {
         'id': id,
         'code': f"{domain_type}_{key}",
         'domainType': domain_type,
+        'shortName': dhis2_valid_short_name_,
         'valueType': 'TEXT'
     }
 
@@ -273,11 +275,9 @@ def __update_data_elements(key, domain_type="TRACKER"):
         json_payload['aggregationType'] = "NONE"
         json_payload['categoryCombo'] = {"id": Dhis2CodesToIdsCache.get_category_combination_id('default')}
         json_payload['name'] = f"{name_} Daily Registry"
-        json_payload['shortName'] = f"{name_} Daily Registry"
     elif domain_type == 'TRACKER':
         json_payload['aggregationType'] = "NONE"
         json_payload['name'] = f"{name_} Case Form"
-        json_payload['shortName'] = f"{name_} Case Form"
 
     json_payload_flat = json.dumps(json_payload)
 
@@ -419,15 +419,15 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_data_element_id(data_element_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', data_element_code)
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', f"TRACKER_{data_element_code}")
 
     @staticmethod
     def get_program_id(program_code):
         return Dhis2CodesToIdsCache.get_and_cache_value('programs', program_code)
 
     @staticmethod
-    def get_data_set_id(data_set):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', data_set)
+    def get_data_set_id(data_set_code):
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', f"TRACKER_{data_set_code}")
 
     @staticmethod
     def get_category_combination_id(category_combination):
