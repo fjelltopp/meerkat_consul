@@ -265,7 +265,7 @@ def __update_data_elements(key, domain_type="TRACKER"):
     json_payload = {
         'id': id,
         'code': f"{domain_type}_{key}",
-        'domain_type': domain_type,
+        'domainType': domain_type,
         'valueType': 'TEXT'
     }
 
