@@ -333,12 +333,15 @@ def data_set():
     data_set_payload_array = []
     try:
         json_request = json.loads(reqparse.request.get_json())
+        #json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
         data_entry = message['Body']
         data_entry_content = data_entry['data']
         data_set_code = data_entry['formId']
+        if data_set_code != 'new_som_register':
+            abort(501, messages="Not supported")
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
         data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
                        data_entry['data'].items()]
@@ -348,7 +351,7 @@ def data_set():
             'completeDate': date,
             'period': get_period_from_date(date, data_entry['formId']),
             'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-            'attributeOptionCombo': "aoc_id",
+#            'attributeOptionCombo': "aoc_id",
             'dataValues': data_values
         }
         data_set_payload_array.append(data_set_payload)
@@ -382,7 +385,7 @@ def uuid_to_dhis2_uid(uuid):
 
 
 def get_period_from_date(input_date, formId):
-    period = dhis2_config.get('data_set_peroid', {}).get(formId, 'daily')
+    period = dhis2_config.get('data_set_period', {}).get(formId, 'daily')
 
     if period == 'daily':
         ret = str(input_date.year) + str(input_date.month) + str(input_date.day)
