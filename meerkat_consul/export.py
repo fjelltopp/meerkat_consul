@@ -12,7 +12,7 @@ from meerkat_consul import logger, api_url, app
 from meerkat_consul.auth_client import auth
 from meerkat_consul.authenticate import headers, refresh_auth_token
 from meerkat_consul.decorators import get, post, put, async
-from meerkat_consul.dhis2 import NewIdsProvider
+from meerkat_consul.dhis2 import NewIdsProvider, transform_to_dhis2_code
 
 __codes_to_ids = {}
 dhis2_config = app.config['DHIS2_CONFIG']
@@ -133,7 +133,7 @@ def __update_dhis2_program(field_names, form_name):
     program_payload = {
         'name': form_name,
         'shortName': form_name,
-        'code': form_name,
+        'code': transform_to_dhis2_code(form_name),
         'programType': 'WITHOUT_REGISTRATION'
     }
     if programs:
@@ -198,7 +198,7 @@ def __update_dhis2_dataset(field_names, form_name):
     dataset_payload = {
         'name': form_name,
         'shortName': form_name,
-        'code': form_name,
+        'code': transform_to_dhis2_code(form_name),
         'periodType': "Daily"
     }
     if datasets:
@@ -262,22 +262,23 @@ def __update_data_elements(key, domain_type="TRACKER"):
     id = dhis2_ids.pop()
 
     name_ = f"HOQM {key}"
-    dhis2_valid_short_name_ = key[-50:]
     json_payload = {
         'id': id,
-        'code': f"{domain_type}_{key}",
+        'code': transform_to_dhis2_code(f"{domain_type}_{key}"),
         'domainType': domain_type,
-        'shortName': dhis2_valid_short_name_,
         'valueType': 'TEXT'
     }
 
+    short_name_postfix = key[-47:]
     if domain_type == "AGGREGATE":
         json_payload['aggregationType'] = "NONE"
         json_payload['categoryCombo'] = {"id": Dhis2CodesToIdsCache.get_category_combination_id('default')}
         json_payload['name'] = f"{name_} Daily Registry"
+        json_payload['shortName'] = f"DR_{short_name_postfix}"
     elif domain_type == 'TRACKER':
         json_payload['aggregationType'] = "NONE"
         json_payload['name'] = f"{name_} Case Form"
+        json_payload['shortName'] = f"CF_{short_name_postfix}"
 
     json_payload_flat = json.dumps(json_payload)
 
@@ -419,15 +420,15 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_data_element_id(data_element_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', f"TRACKER_{data_element_code}")
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', transform_to_dhis2_code(f"TRACKER_{data_element_code}"))
 
     @staticmethod
     def get_program_id(program_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('programs', program_code)
+        return Dhis2CodesToIdsCache.get_and_cache_value('programs', transform_to_dhis2_code(program_code))
 
     @staticmethod
     def get_data_set_id(data_set_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', f"TRACKER_{data_set_code}")
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', transform_to_dhis2_code(f"TRACKER_{data_set_code}"))
 
     @staticmethod
     def get_category_combination_id(category_combination):

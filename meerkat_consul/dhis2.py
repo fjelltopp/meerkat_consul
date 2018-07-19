@@ -1,3 +1,5 @@
+import hashlib
+
 from meerkat_consul import logger
 from meerkat_consul.decorators import get
 
@@ -19,3 +21,7 @@ class NewIdsProvider:
         if not result:
             logger.error("Could not get ids from DHIS2.")
         return result
+
+
+def transform_to_dhis2_code(input):
+    return hashlib.md5(input.encode('utf-8')).hexdigest()
