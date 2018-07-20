@@ -341,7 +341,7 @@ def data_set():
         data_entry_content = data_entry['data']
         data_set_code = data_entry['formId']
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_i"), 'value': v} for i, v in
+        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                        data_entry['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
         data_set_payload = {
