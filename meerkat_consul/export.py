@@ -12,7 +12,7 @@ from meerkat_consul import logger, api_url, app
 from meerkat_consul.auth_client import auth
 from meerkat_consul.authenticate import headers, refresh_auth_token
 from meerkat_consul.decorators import get, post, put, async
-from meerkat_consul.dhis2 import NewIdsProvider
+from meerkat_consul.dhis2 import NewIdsProvider, transform_to_dhis2_code
 
 __codes_to_ids = {}
 dhis2_config = app.config['DHIS2_CONFIG']
@@ -133,7 +133,7 @@ def __update_dhis2_program(field_names, form_name):
     program_payload = {
         'name': form_name,
         'shortName': form_name,
-        'code': form_name,
+        'code': transform_to_dhis2_code(form_name),
         'programType': 'WITHOUT_REGISTRATION'
     }
     if programs:
@@ -164,7 +164,7 @@ def __update_dhis2_program(field_names, form_name):
         req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
     # Update data elements
-    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
+    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{code}")}} for code in
                          field_names]
     # Update data elements
     stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
@@ -198,7 +198,7 @@ def __update_dhis2_dataset(field_names, form_name):
     dataset_payload = {
         'name': form_name,
         'shortName': form_name,
-        'code': form_name,
+        'code': transform_to_dhis2_code(form_name),
         'periodType': "Daily"
     }
     if datasets:
@@ -238,7 +238,7 @@ def __update_dhis2_dataset(field_names, form_name):
             __update_data_elements(field_name, "AGGREGATE")
 
     # Connect data elements to data set
-    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(code)}} for code in
+    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{name}")}} for name in
                          field_names]
 
     logger.info("Found %d relevant data elements", len(data_element_keys))
@@ -264,20 +264,21 @@ def __update_data_elements(key, domain_type="TRACKER"):
     name_ = f"HOQM {key}"
     json_payload = {
         'id': id,
-        'code': f"{domain_type}_{key}",
+        'code': transform_to_dhis2_code(f"{domain_type}_{key}"),
         'domainType': domain_type,
         'valueType': 'TEXT'
     }
 
+    short_name_postfix = key[-47:]
     if domain_type == "AGGREGATE":
         json_payload['aggregationType'] = "NONE"
         json_payload['categoryCombo'] = {"id": Dhis2CodesToIdsCache.get_category_combination_id('default')}
         json_payload['name'] = f"{name_} Daily Registry"
-        json_payload['shortName'] = f"{name_} Daily Registry"
+        json_payload['shortName'] = f"DR_{short_name_postfix}"
     elif domain_type == 'TRACKER':
         json_payload['aggregationType'] = "NONE"
         json_payload['name'] = f"{name_} Case Form"
-        json_payload['shortName'] = f"{name_} Case Form"
+        json_payload['shortName'] = f"CF_{short_name_postfix}"
 
     json_payload_flat = json.dumps(json_payload)
 
@@ -308,7 +309,7 @@ def events():
         date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
         _uuid = case['data'].get('meta/instanceID')[-11:]
         event_id = uuid_to_dhis2_uid(_uuid)
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
+        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
                        case['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
         event_payload = {
@@ -340,7 +341,7 @@ def data_set():
         data_entry_content = data_entry['data']
         data_set_code = data_entry['formId']
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(i), 'value': v} for i, v in
+        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_i"), 'value': v} for i, v in
                        data_entry['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
         data_set_payload = {
@@ -419,15 +420,15 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_data_element_id(data_element_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', data_element_code)
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataElements', transform_to_dhis2_code(data_element_code))
 
     @staticmethod
     def get_program_id(program_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('programs', program_code)
+        return Dhis2CodesToIdsCache.get_and_cache_value('programs', transform_to_dhis2_code(program_code))
 
     @staticmethod
-    def get_data_set_id(data_set):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', data_set)
+    def get_data_set_id(data_set_code):
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', transform_to_dhis2_code(f"TRACKER_{data_set_code}"))
 
     @staticmethod
     def get_category_combination_id(category_combination):
