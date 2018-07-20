@@ -331,10 +331,11 @@ def events():
 def data_set():
     logger.debug("Starting data set export")
     data_set_payload_array = []
+    json_request = reqparse.request.get_json()
     try:
-        json_request = json.loads(reqparse.request.get_json())
-        #json_request = reqparse.request.get_json()
+        json_request = json.loads(json_request)
     except JSONDecodeError:
+        json_request = json_request
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
         data_entry = message['Body']
@@ -388,7 +389,7 @@ def get_period_from_date(input_date, formId):
     period = dhis2_config.get('data_set_period', {}).get(formId, 'daily')
 
     if period == 'daily':
-        ret = str(input_date.year) + str(input_date.month) + str(input_date.day)
+        ret = input_date[0:3] + input_date[4:5] + input_date[6:7]
         return ret
     else:
         return
