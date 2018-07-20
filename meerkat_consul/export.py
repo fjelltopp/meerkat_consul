@@ -333,6 +333,7 @@ def data_set():
     data_set_payload_array = []
     json_request = reqparse.request.get_json()
     try:
+        #json_request=json_request
         json_request = json.loads(json_request)
     except JSONDecodeError:
         json_request = json_request
@@ -369,12 +370,13 @@ def post_events(events_payload):
     logger.debug(event_res.json().get('message'))
 
 
-@async
+# @async
 def post_data_set(data_sets_payload):
-    data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
-                        headers=dhis2_headers, data=json.dumps(data_sets_payload))
-    logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
-    logger.debug(data_set_res.json().get('message'))
+    for data_set in data_sets_payload['data_entries']:
+        data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
+                            headers=dhis2_headers, data=json.dumps(data_set))
+        logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
+        logger.debug(data_set_res.json().get('message'))
 
 
 def uuid_to_dhis2_uid(uuid):
@@ -389,7 +391,7 @@ def get_period_from_date(input_date, formId):
     period = dhis2_config.get('data_set_period', {}).get(formId, 'daily')
 
     if period == 'daily':
-        ret = input_date[0:3] + input_date[4:5] + input_date[6:7]
+        ret = input_date[0:4] + input_date[5:7] + input_date[8:10]
         return ret
     else:
         return
