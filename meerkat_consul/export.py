@@ -111,6 +111,7 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
 
+    # TODO: This needs to be read from the country config
     form_config = {"new_som_case": "event", "new_som_register": "data_set"}
 
     for form_name, field_names in forms.items():
@@ -299,7 +300,8 @@ def events():
     logger.debug("Starting event export.")
     event_payload_array = []
     try:
-        json_request = json.loads(reqparse.request.get_json())
+        #json_request = json.loads(reqparse.request.get_json())
+        json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
@@ -334,10 +336,9 @@ def data_set():
     data_set_payload_array = []
     json_request = reqparse.request.get_json()
     try:
-        #json_request=json_request
-        json_request = json.loads(json_request)
+        #json_request = json.loads(reqparse.request.get_json())
+        json_request = reqparse.request.get_json()
     except JSONDecodeError:
-        json_request = json_request
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
         data_entry = message['Body']
@@ -354,7 +355,6 @@ def data_set():
             'completeDate': date,
             'period': get_period_from_date(date, data_entry['formId']),
             'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-#            'attributeOptionCombo': "aoc_id",
             'dataValues': data_values
         }
         data_set_payload_array.append(data_set_payload)
