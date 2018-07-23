@@ -294,6 +294,15 @@ def meerkat_to_dhis2_date_format(meerkat_date):
     return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y-%m-%d")
 
 
+def meerkat_to_dhis2_period_date_format(meerkat_date, form_name):
+    period = dhis2_config.get('data_set_period', {}).get(form_name, 'daily')
+
+    if period == 'daily':
+        return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y%m%d")
+    else:
+        return None
+
+
 @dhis2_export.route("/events", methods=['POST'])
 @auth.authorise()
 def events():
@@ -343,17 +352,18 @@ def data_set():
     for message in json_request['Messages']:
         data_entry = message['Body']
         data_entry_content = data_entry['data']
-        data_set_code = data_entry['formId']
-        if data_set_code != 'new_som_register':
+        form_name = data_entry['formId']
+        if form_name != 'new_som_register':
             abort(501, messages="Not supported")
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
+        period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
         data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                        data_entry['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
         data_set_payload = {
-            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(data_set_code),
+            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
             'completeDate': date,
-            'period': get_period_from_date(date, data_entry['formId']),
+            'period': period,
             'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
             'dataValues': data_values
         }
@@ -386,16 +396,6 @@ def uuid_to_dhis2_uid(uuid):
     if result[0].isdigit():
         result = 'X' + result[1:]
     return result
-
-
-def get_period_from_date(input_date, formId):
-    period = dhis2_config.get('data_set_period', {}).get(formId, 'daily')
-
-    if period == 'daily':
-        ret = input_date[0:4] + input_date[5:7] + input_date[8:10]
-        return ret
-    else:
-        return
 
 
 class MeerkatCache():
