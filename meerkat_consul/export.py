@@ -347,7 +347,7 @@ def data_set():
         if data_set_code != 'new_som_register':
             abort(501, messages="Not supported")
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_i"), 'value': v} for i, v in
+        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                        data_entry['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
         data_set_payload = {
