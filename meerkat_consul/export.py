@@ -65,13 +65,14 @@ def __update_dhis2_program(field_names, form_name):
     for field_name in field_names:
         if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
             __update_data_elements(field_name)
-    rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+    dhis2_code = transform_to_dhis2_code(form_name)
+    rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, dhis2_code), headers=dhis2_headers)
     programs = rv.json().get('programs', [])
     display_name = form_export_config[form_name].get("exportName", form_name)
     program_payload = {
         'name': display_name,
         'shortName': display_name,
-        'code': transform_to_dhis2_code(form_name),
+        'code': dhis2_code,
         'programType': 'WITHOUT_REGISTRATION'
     }
     if programs:
@@ -86,7 +87,7 @@ def __update_dhis2_program(field_names, form_name):
         program_payload["organisationUnits"] = [{"id": x} for x in organisations]
         payload_json = json.dumps(program_payload)
         req = put("{}/programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
-        logger.info("Updated program %s (id:%s) with status %d", form_name, program_id, req.status_code)
+        logger.info("Updated program %s (id:%s) with status %d", dhis2_code, program_id, req.status_code)
 
     else:
         program_id = dhis2_ids.pop()
@@ -98,15 +99,15 @@ def __update_dhis2_program(field_names, form_name):
         program_payload["organisationUnits"] = [{"id": x} for x in organisations]
         payload_json = json.dumps(program_payload)
         req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
-        logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
+        logger.info("Created program %s (id:%s) with status %d", dhis2_code, program_id, req.status_code)
     # Update data elements
     data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{code}")}} for code in
                          field_names]
-    stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
+    stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, dhis2_code),
                  headers=dhis2_headers).json()
     stage_payload = {
         "name": display_name,
-        "code": transform_to_dhis2_code(form_name),
+        "code": transform_to_dhis2_code(dhis2_code),
         "program": {
             "id": program_id
         },
@@ -117,24 +118,24 @@ def __update_dhis2_program(field_names, form_name):
         json_stage_payload = json.dumps(stage_payload)
         res = put("{}/programStages/{}".format(dhis2_api_url, stage_id), data=json_stage_payload,
                   headers=dhis2_headers)
-        logger.info("Updated stage for program %s with status %d", form_name, res.status_code)
+        logger.info("Updated stage for program %s with status %d", dhis2_code, res.status_code)
     else:
         stage_id = dhis2_ids.pop()
         stage_payload["id"] = stage_id
         json_stage_payload = json.dumps(stage_payload)
         res = post("{}/programStages".format(dhis2_api_url), data=json_stage_payload, headers=dhis2_headers)
-        logger.info("Created stage for program %s with status %d", form_name, res.status_code)
+        logger.info("Created stage for program %s with status %d", dhis2_code, res.status_code)
 
 
 def __update_dhis2_dataset(field_names, form_name):
-
-    rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
+    dhis2_code = transform_to_dhis2_code(form_name)
+    rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, dhis2_code), headers=dhis2_headers)
     datasets = rv.json().get('dataSets', [])
     display_name = form_export_config[form_name].get("exportName", form_name)
     dataset_payload = {
         'name': display_name,
         'shortName': display_name,
-        'code': transform_to_dhis2_code(form_name),
+        'code': dhis2_code,
         'periodType': "Daily"
     }
     if datasets:
