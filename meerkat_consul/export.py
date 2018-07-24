@@ -329,72 +329,66 @@ def meerkat_to_dhis2_period_date_format(meerkat_date, form_name):
         return None
 
 
-@dhis2_export.route("/events", methods=['POST'])
+@dhis2_export.route("/submissions", methods=['POST'])
 @auth.authorise()
-def events():
+def submissions():
     logger.debug("Starting event export.")
-    event_payload_array = []
+    payload_array = []
     try:
         json_request = json.loads(reqparse.request.get_json())
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
-    for message in json_request['Messages']:
-        case = message['Body']
-        case_data = case['data']
-        program = case['formId']
-        date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
-        _uuid = case['data'].get('meta/instanceID')[-11:]
-        event_id = uuid_to_dhis2_uid(_uuid)
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
-                       case['data'].items()]
-        country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
-        event_payload = {
-            'event': event_id,
-            'program': Dhis2CodesToIdsCache.get_program_id(program),
-            'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-            'eventDate': date,
-            'completedDate': date,
-            'dataValues': data_values,
-            'status': 'COMPLETED'
-        }
-        event_payload_array.append(event_payload)
-    events_payload = {"events": event_payload_array}
-    post_events(events_payload)
-    return jsonify({"message": "Sending event batch finished successfully"}), 202
-
-
-@dhis2_export.route("/dataSets", methods=['POST'])
-@auth.authorise()
-def data_set():
-    logger.debug("Starting data set export")
-    data_set_payload_array = []
-    json_request = reqparse.request.get_json()
-    try:
-        json_request = json.loads(reqparse.request.get_json())
-    except JSONDecodeError:
-        abort(400, messages="Unable to parse posted JSON")
-    for message in json_request['Messages']:
-        data_entry = message['Body']
-        data_entry_content = data_entry['data']
-        form_name = data_entry['formId']
-        if form_name != 'new_som_register':
-            abort(501, messages="Not supported")
-        date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-        period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
-                       data_entry['data'].items()]
-        country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
-        data_set_payload = {
-            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
-            'completeDate': date,
-            'period': period,
-            'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-            'dataValues': data_values
-        }
-        data_set_payload_array.append(data_set_payload)
-    data_sets_payload = {"data_entries": data_set_payload_array}
-    post_data_set(data_sets_payload)
-    return jsonify({"message": "Sending data entry batch finished successfully"}), 202
+    form_name = json_request["formId"]
+    if form_name not in form_export_config:
+        #TODO: Handle this with 4xx http error
+        return jsonify({"message": f"Form {form_name} is not supported."}), 202
+    export_type = form_export_config[form_name].get("exportType")
+    if export_type == "event":
+        for message in json_request['Messages']:
+            case = message['Body']
+            case_data = case['data']
+            program = case['formId']
+            date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
+            _uuid = case['data'].get('meta/instanceID')[-11:]
+            event_id = uuid_to_dhis2_uid(_uuid)
+            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
+                           case['data'].items()]
+            country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
+            event_payload = {
+                'event': event_id,
+                'program': Dhis2CodesToIdsCache.get_program_id(program),
+                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
+                'eventDate': date,
+                'completedDate': date,
+                'dataValues': data_values,
+                'status': 'COMPLETED'
+            }
+            payload_array.append(event_payload)
+        events_payload = {"events": payload_array}
+        post_events(events_payload)
+    elif export_type == "data_set":
+        for message in json_request['Messages']:
+            data_entry = message['Body']
+            data_entry_content = data_entry['data']
+            form_name = data_entry['formId']
+            if form_name != 'new_som_register':
+                abort(501, messages="Not supported")
+            date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
+            period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
+            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
+                           data_entry['data'].items()]
+            country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
+            data_set_payload = {
+                'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
+                'completeDate': date,
+                'period': period,
+                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
+                'dataValues': data_values
+            }
+            payload_array.append(data_set_payload)
+        data_sets_payload = {"data_entries": payload_array}
+        post_data_set(data_sets_payload)
+    return jsonify({"message": "Sending submission batch finished successfully"}), 202
 
 
 @async
