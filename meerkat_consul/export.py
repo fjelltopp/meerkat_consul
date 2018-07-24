@@ -188,8 +188,8 @@ def __update_dhis2_program(field_names, form_name):
     stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
                  headers=dhis2_headers).json()
     stage_payload = {
-        "name": form_name,
-        "code": form_name,
+        "name": display_name,
+        "code": transform_to_dhis2_code(form_name),
         "program": {
             "id": program_id
         },
@@ -460,7 +460,7 @@ class Dhis2CodesToIdsCache():
     def has_data_element_with_code(dhis2_code_suffix, domain_type="TRACKER"):
         try:
             dhis2_code = f"{domain_type}_{dhis2_code_suffix}"
-            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
+            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', transform_to_dhis2_code(dhis2_code))
         except ValueError:
             return False
         return True
