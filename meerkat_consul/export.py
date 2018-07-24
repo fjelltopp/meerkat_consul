@@ -24,6 +24,26 @@ dhis2_ids = NewIdsProvider(dhis2_api_url, dhis2_headers)
 COUNTRY_PARENT = 'ImspTQPwCqd'  # for testing with demo DHIS2 server, country should have no parent
 COUNTRY_LOCATION_ID = app.config['COUNTRY_LOCATION_ID']
 
+# TODO: This needs to be read from the country config
+form_export_config = {
+    "new_som_case": {
+        "exportName": "HOQM Case Form",
+        "exportType": "event"
+    },
+    "som_case": {
+        "exportName": "HOQM Legacy Case Form",
+        "exportType": "event"
+    },
+    "som_register": {
+        "exportName": "HOQM Legacy Daily Registry",
+        "exportType": "data_set"
+    },
+    "new_som_register": {
+        "exportName": "HOQM Daily Registry",
+        "exportType": "data_set"
+    }
+}
+
 dhis2_export = Blueprint('export', __name__, url_prefix='/dhis2/export')
 
 @dhis2_export.route('/hello')
@@ -111,16 +131,20 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
 
-    # TODO: This needs to be read from the country config
-    form_config = {"new_som_case": "event", "new_som_register": "data_set"}
-
-    for form_name, field_names in forms.items():
-        if form_config.get(form_name) == "event":
-            logger.info("Event form %s found", form_name)
+    for form_name, export_config in form_export_config.items():
+        field_names = forms.get(form_name)
+        if not field_names:
+            abort(500, message=f"Can't find fields for form {form_name}")
+        export_type = export_config["exportType"]
+        if export_type == "event":
+            logger.debug("Event form %s found", form_name)
             __update_dhis2_program(field_names, form_name)
-        elif form_config.get(form_name) == "data_set":
-            logger.info("Data set form %s found", form_name)
+        elif export_type == "data_set":
+            logger.debug("Data set form %s found", form_name)
             __update_dhis2_dataset(field_names, form_name)
+        else:
+            msg_ = f"Unsupported exportType {export_type} for {form_name}"
+            abort(500, message=msg_)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -131,9 +155,10 @@ def __update_dhis2_program(field_names, form_name):
             __update_data_elements(field_name)
     rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
     programs = rv.json().get('programs', [])
+    display_name = form_export_config[form_name].get("exportName", form_name)
     program_payload = {
-        'name': form_name,
-        'shortName': form_name,
+        'name': display_name,
+        'shortName': display_name,
         'code': transform_to_dhis2_code(form_name),
         'programType': 'WITHOUT_REGISTRATION'
     }
@@ -171,8 +196,8 @@ def __update_dhis2_program(field_names, form_name):
     stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
                  headers=dhis2_headers).json()
     stage_payload = {
-        "name": form_name,
-        "code": form_name,
+        "name": display_name,
+        "code": transform_to_dhis2_code(form_name),
         "program": {
             "id": program_id
         },
@@ -196,9 +221,10 @@ def __update_dhis2_dataset(field_names, form_name):
 
     rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
     datasets = rv.json().get('dataSets', [])
+    display_name = form_export_config[form_name].get("exportName", form_name)
     dataset_payload = {
-        'name': form_name,
-        'shortName': form_name,
+        'name': display_name,
+        'shortName': display_name,
         'code': transform_to_dhis2_code(form_name),
         'periodType': "Daily"
     }
@@ -303,74 +329,66 @@ def meerkat_to_dhis2_period_date_format(meerkat_date, form_name):
         return None
 
 
-@dhis2_export.route("/events", methods=['POST'])
+@dhis2_export.route("/submissions", methods=['POST'])
 @auth.authorise()
-def events():
+def submissions():
     logger.debug("Starting event export.")
-    event_payload_array = []
+    payload_array = []
     try:
         json_request = json.loads(reqparse.request.get_json())
-        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
-    for message in json_request['Messages']:
-        case = message['Body']
-        case_data = case['data']
-        program = case['formId']
-        date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
-        _uuid = case['data'].get('meta/instanceID')[-11:]
-        event_id = uuid_to_dhis2_uid(_uuid)
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
-                       case['data'].items()]
-        country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
-        event_payload = {
-            'event': event_id,
-            'program': Dhis2CodesToIdsCache.get_program_id(program),
-            'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-            'eventDate': date,
-            'completedDate': date,
-            'dataValues': data_values,
-            'status': 'COMPLETED'
-        }
-        event_payload_array.append(event_payload)
-    events_payload = {"events": event_payload_array}
-    post_events(events_payload)
-    return jsonify({"message": "Sending event batch finished successfully"}), 202
-
-
-@dhis2_export.route("/dataSets", methods=['POST'])
-@auth.authorise()
-def data_set():
-    logger.debug("Starting data set export")
-    data_set_payload_array = []
-    json_request = reqparse.request.get_json()
-    try:
-        json_request = json.loads(reqparse.request.get_json())
-        # json_request = reqparse.request.get_json()
-    except JSONDecodeError:
-        abort(400, messages="Unable to parse posted JSON")
-    for message in json_request['Messages']:
-        data_entry = message['Body']
-        data_entry_content = data_entry['data']
-        form_name = data_entry['formId']
-        if form_name != 'new_som_register':
-            abort(501, messages="Not supported")
-        date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-        period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
-        data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
-                       data_entry['data'].items()]
-        country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
-        data_set_payload = {
-            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
-            'completeDate': date,
-            'period': period,
-            'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-            'dataValues': data_values
-        }
-        data_set_payload_array.append(data_set_payload)
-    data_sets_payload = {"data_entries": data_set_payload_array}
-    post_data_set(data_sets_payload)
-    return jsonify({"message": "Sending data entry batch finished successfully"}), 202
+    form_name = json_request["formId"]
+    if form_name not in form_export_config:
+        #TODO: Handle this with 4xx http error
+        return jsonify({"message": f"Form {form_name} is not supported."}), 202
+    export_type = form_export_config[form_name].get("exportType")
+    if export_type == "event":
+        for message in json_request['Messages']:
+            case = message['Body']
+            case_data = case['data']
+            program = case['formId']
+            date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
+            _uuid = case['data'].get('meta/instanceID')[-11:]
+            event_id = uuid_to_dhis2_uid(_uuid)
+            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
+                           case['data'].items()]
+            country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
+            event_payload = {
+                'event': event_id,
+                'program': Dhis2CodesToIdsCache.get_program_id(program),
+                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
+                'eventDate': date,
+                'completedDate': date,
+                'dataValues': data_values,
+                'status': 'COMPLETED'
+            }
+            payload_array.append(event_payload)
+        events_payload = {"events": payload_array}
+        post_events(events_payload)
+    elif export_type == "data_set":
+        for message in json_request['Messages']:
+            data_entry = message['Body']
+            data_entry_content = data_entry['data']
+            form_name = data_entry['formId']
+            if form_name != 'new_som_register':
+                abort(501, messages="Not supported")
+            date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
+            period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
+            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
+                           data_entry['data'].items()]
+            country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
+            data_set_payload = {
+                'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
+                'completeDate': date,
+                'period': period,
+                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
+                'dataValues': data_values
+            }
+            payload_array.append(data_set_payload)
+        data_sets_payload = {"data_entries": payload_array}
+        post_data_set(data_sets_payload)
+    return jsonify({"message": "Sending submission batch finished successfully"}), 202
 
 
 @async
@@ -444,7 +462,7 @@ class Dhis2CodesToIdsCache():
     def has_data_element_with_code(dhis2_code_suffix, domain_type="TRACKER"):
         try:
             dhis2_code = f"{domain_type}_{dhis2_code_suffix}"
-            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', dhis2_code)
+            Dhis2CodesToIdsCache.get_and_cache_value('dataElements', transform_to_dhis2_code(dhis2_code))
         except ValueError:
             return False
         return True
