@@ -111,6 +111,7 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
 
+    # TODO: This needs to be read from the country config
     form_config = {"new_som_case": "event", "new_som_register": "data_set"}
 
     for form_name, field_names in forms.items():
@@ -293,6 +294,15 @@ def meerkat_to_dhis2_date_format(meerkat_date):
     return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y-%m-%d")
 
 
+def meerkat_to_dhis2_period_date_format(meerkat_date, form_name):
+    period = dhis2_config.get('data_set_period', {}).get(form_name, 'daily')
+
+    if period == 'daily':
+        return datetime.strptime(meerkat_date, "%b %d, %Y %H:%M:%S %p").strftime("%Y%m%d")
+    else:
+        return None
+
+
 @dhis2_export.route("/events", methods=['POST'])
 @auth.authorise()
 def events():
@@ -300,6 +310,7 @@ def events():
     event_payload_array = []
     try:
         json_request = json.loads(reqparse.request.get_json())
+        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
@@ -327,29 +338,33 @@ def events():
     return jsonify({"message": "Sending event batch finished successfully"}), 202
 
 
-@dhis2_export.route("/data_set", methods=['POST'])
+@dhis2_export.route("/dataSets", methods=['POST'])
 @auth.authorise()
 def data_set():
     logger.debug("Starting data set export")
     data_set_payload_array = []
+    json_request = reqparse.request.get_json()
     try:
         json_request = json.loads(reqparse.request.get_json())
+        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
         data_entry = message['Body']
         data_entry_content = data_entry['data']
-        data_set_code = data_entry['formId']
+        form_name = data_entry['formId']
+        if form_name != 'new_som_register':
+            abort(501, messages="Not supported")
         date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
+        period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
         data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                        data_entry['data'].items()]
         country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
         data_set_payload = {
-            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(data_set_code),
+            'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
             'completeDate': date,
-            'period': get_period_from_date(date, data_entry['formId']),
+            'period': period,
             'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
-            'attributeOptionCombo': "aoc_id",
             'dataValues': data_values
         }
         data_set_payload_array.append(data_set_payload)
@@ -368,10 +383,11 @@ def post_events(events_payload):
 
 @async
 def post_data_set(data_sets_payload):
-    data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
-                        headers=dhis2_headers, data=json.dumps(data_sets_payload))
-    logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
-    logger.debug(data_set_res.json().get('message'))
+    for data_set in data_sets_payload['data_entries']:
+        data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
+                            headers=dhis2_headers, data=json.dumps(data_set))
+        logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
+        logger.debug(data_set_res.json().get('message'))
 
 
 def uuid_to_dhis2_uid(uuid):
@@ -380,16 +396,6 @@ def uuid_to_dhis2_uid(uuid):
     if result[0].isdigit():
         result = 'X' + result[1:]
     return result
-
-
-def get_period_from_date(input_date, formId):
-    period = dhis2_config.get('data_set_peroid', {}).get(formId, 'daily')
-
-    if period == 'daily':
-        ret = str(input_date.year) + str(input_date.month) + str(input_date.day)
-        return ret
-    else:
-        return
 
 
 class MeerkatCache():
@@ -428,7 +434,7 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_data_set_id(data_set_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', transform_to_dhis2_code(f"TRACKER_{data_set_code}"))
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', transform_to_dhis2_code(data_set_code))
 
     @staticmethod
     def get_category_combination_id(category_combination):
