@@ -309,8 +309,8 @@ def events():
     logger.debug("Starting event export.")
     event_payload_array = []
     try:
-        #json_request = json.loads(reqparse.request.get_json())
-        json_request = reqparse.request.get_json()
+        json_request = json.loads(reqparse.request.get_json())
+        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
@@ -338,15 +338,15 @@ def events():
     return jsonify({"message": "Sending event batch finished successfully"}), 202
 
 
-@dhis2_export.route("/data_set", methods=['POST'])
+@dhis2_export.route("/dataSets", methods=['POST'])
 @auth.authorise()
 def data_set():
     logger.debug("Starting data set export")
     data_set_payload_array = []
     json_request = reqparse.request.get_json()
     try:
-        #json_request = json.loads(reqparse.request.get_json())
-        json_request = reqparse.request.get_json()
+        json_request = json.loads(reqparse.request.get_json())
+        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
@@ -381,7 +381,7 @@ def post_events(events_payload):
     logger.debug(event_res.json().get('message'))
 
 
-# @async
+@async
 def post_data_set(data_sets_payload):
     for data_set in data_sets_payload['data_entries']:
         data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
@@ -434,7 +434,7 @@ class Dhis2CodesToIdsCache():
 
     @staticmethod
     def get_data_set_id(data_set_code):
-        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', transform_to_dhis2_code(f"TRACKER_{data_set_code}"))
+        return Dhis2CodesToIdsCache.get_and_cache_value('dataSets', transform_to_dhis2_code(data_set_code))
 
     @staticmethod
     def get_category_combination_id(category_combination):
