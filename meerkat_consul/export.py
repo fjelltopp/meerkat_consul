@@ -10,7 +10,7 @@ from flask_restful import abort, reqparse
 
 from meerkat_consul import logger, api_url, app
 from meerkat_consul.auth_client import auth
-from meerkat_consul.authenticate import headers, refresh_auth_token
+from meerkat_consul.authenticate import meerkat_headers
 from meerkat_consul.decorators import get, post, put, async
 from meerkat_consul.dhis2 import NewIdsProvider, transform_to_dhis2_code
 
@@ -39,9 +39,8 @@ def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
 
 @dhis2_export.route("/formFields", methods=['POST'])
 @auth.authorise()
-@refresh_auth_token
 def export_form_fields():
-    forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
+    forms = requests.get("{}/export/forms".format(api_url), headers=meerkat_headers()).json()
     logger.info(f"Forms: {forms}")
 
     for form_name, export_config in form_export_config.items():
@@ -187,7 +186,7 @@ def __update_dhis2_dataset(field_names, form_name):
 
 
 def get_all_operational_clinics_as_dhis2_ids():
-    locations = requests.get("{}/locations".format(api_url), headers=headers).json()
+    locations = requests.get("{}/locations".format(api_url), headers=meerkat_headers()).json()
     for location in locations.values():
         if location.get('case_report') != 0 and location.get('level') == 'clinic' and location.get('country_location_id'):
             yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
