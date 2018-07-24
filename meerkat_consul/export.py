@@ -129,7 +129,7 @@ def export_form_fields():
             abort(500, message=f"Can't find fields for form {form_name}")
         export_type = export_config["exportType"]
         if export_type == "event":
-            logger.degug("Event form %s found", form_name)
+            logger.debug("Event form %s found", form_name)
             __update_dhis2_program(field_names, form_name)
         elif export_type == "data_set":
             logger.debug("Data set form %s found", form_name)
@@ -147,9 +147,10 @@ def __update_dhis2_program(field_names, form_name):
             __update_data_elements(field_name)
     rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
     programs = rv.json().get('programs', [])
+    display_name = form_export_config[form_name].get("exportName", form_name)
     program_payload = {
-        'name': form_name,
-        'shortName': form_name,
+        'name': display_name,
+        'shortName': display_name,
         'code': transform_to_dhis2_code(form_name),
         'programType': 'WITHOUT_REGISTRATION'
     }
@@ -212,9 +213,10 @@ def __update_dhis2_dataset(field_names, form_name):
 
     rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, form_name), headers=dhis2_headers)
     datasets = rv.json().get('dataSets', [])
+    display_name = form_export_config[form_name].get("exportName", form_name)
     dataset_payload = {
-        'name': form_name,
-        'shortName': form_name,
+        'name': display_name,
+        'shortName': display_name,
         'code': transform_to_dhis2_code(form_name),
         'periodType': "Daily"
     }
