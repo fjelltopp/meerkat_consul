@@ -30,6 +30,14 @@ form_export_config = {
         "exportName": "HOQM Case Form",
         "exportType": "event"
     },
+    "som_case": {
+        "exportName": "HOQM Legacy Case Form",
+        "exportType": "event"
+    },
+    "som_register": {
+        "exportName": "HOQM Legacy Daily Registry",
+        "exportType": "data_set"
+    },
     "new_som_register": {
         "exportName": "HOQM Daily Registry",
         "exportType": "data_set"
