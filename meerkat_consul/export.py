@@ -24,6 +24,18 @@ dhis2_ids = NewIdsProvider(dhis2_api_url, dhis2_headers)
 COUNTRY_PARENT = 'ImspTQPwCqd'  # for testing with demo DHIS2 server, country should have no parent
 COUNTRY_LOCATION_ID = app.config['COUNTRY_LOCATION_ID']
 
+# TODO: This needs to be read from the country config
+form_export_config = {
+    "new_som_case": {
+        "exportName": "HOQM Case Form",
+        "exportType": "event"
+    },
+    "new_som_register": {
+        "exportName": "HOQM Daily Registry",
+        "exportType": "data_set"
+    }
+}
+
 dhis2_export = Blueprint('export', __name__, url_prefix='/dhis2/export')
 
 @dhis2_export.route('/hello')
@@ -111,16 +123,20 @@ def export_form_fields():
     forms = requests.get("{}/export/forms".format(api_url), headers=headers).json()
     logger.info(f"Forms: {forms}")
 
-    # TODO: This needs to be read from the country config
-    form_config = {"new_som_case": "event", "new_som_register": "data_set"}
-
-    for form_name, field_names in forms.items():
-        if form_config.get(form_name) == "event":
-            logger.info("Event form %s found", form_name)
+    for form_name, export_config in form_export_config.items():
+        field_names = forms.get(form_name)
+        if not field_names:
+            abort(500, message=f"Can't find fields for form {form_name}")
+        export_type = export_config["exportType"]
+        if export_type == "event":
+            logger.degug("Event form %s found", form_name)
             __update_dhis2_program(field_names, form_name)
-        elif form_config.get(form_name) == "data_set":
-            logger.info("Data set form %s found", form_name)
+        elif export_type == "data_set":
+            logger.debug("Data set form %s found", form_name)
             __update_dhis2_dataset(field_names, form_name)
+        else:
+            msg_ = f"Unsupported exportType {export_type} for {form_name}"
+            abort(500, message=msg_)
 
     return jsonify({"message": "Exporting form metadata finished successfully"})
 
@@ -310,7 +326,6 @@ def events():
     event_payload_array = []
     try:
         json_request = json.loads(reqparse.request.get_json())
-        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
@@ -346,7 +361,6 @@ def data_set():
     json_request = reqparse.request.get_json()
     try:
         json_request = json.loads(reqparse.request.get_json())
-        # json_request = reqparse.request.get_json()
     except JSONDecodeError:
         abort(400, messages="Unable to parse posted JSON")
     for message in json_request['Messages']:
