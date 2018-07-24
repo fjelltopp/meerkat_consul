@@ -21,9 +21,6 @@ dhis2_headers = dhis2_config["headers"]
 
 dhis2_ids = NewIdsProvider(dhis2_api_url, dhis2_headers)
 
-COUNTRY_PARENT = 'ImspTQPwCqd'  # for testing with demo DHIS2 server, country should have no parent
-COUNTRY_LOCATION_ID = app.config['COUNTRY_LOCATION_ID']
-
 # TODO: This needs to be read from the country config
 form_export_config = {
     "new_som_case": {
@@ -51,78 +48,12 @@ dhis2_export = Blueprint('export', __name__, url_prefix='/dhis2/export')
 def hello():
     return jsonify({"message": "HELLO!"})
 
-@dhis2_export.route('/locationTree', methods=['POST'])
-@auth.authorise()
-@refresh_auth_token
-def locationTree():
-    location_tree = requests.get("{}/locationtree".format(api_url), headers=headers)
-    country = location_tree.json()
-    country_details = get("{}/location/{!r}".format(api_url, COUNTRY_LOCATION_ID)).json()
-
-    dhis2_organisation_code = country_details["country_location_id"]
-    __url = "{}/organisationUnits?filter=code:eq:{}".format(dhis2_api_url, dhis2_organisation_code)
-    dhis2_country_resp = get(__url, headers=dhis2_headers)
-    dhis2_country_details = dhis2_country_resp.json().get("organisationUnits", [])
-    if dhis2_country_details:
-        __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code)
-        dhis2_parent_id = dhis2_country_details[0]["id"]
-    else:
-        logger.error(msg="Error: Country location not found in DHIS2")
-        abort(500, message="Error: Country location not found in DHIS2")
-    child_locations = country["nodes"]
-    __populate_child_locations(dhis2_parent_id, child_locations)
-
-    return jsonify({"message": "Exporting location tree finished successfully"})
-
 
 def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
     if len(dhis2_country_details) > 1:
         logger.error("Received more than one organisation for given code: %s", dhis2_organisation_code)
         abort(500)
 
-
-def __populate_child_locations(dhis2_parent_id, locations):
-    for location in locations:
-        loc_id = location["id"]
-        location_details = requests.get("{}/location/{!r}".format(api_url, loc_id)).json()
-
-        id = __create_new_dhis2_organisation(location_details, dhis2_parent_id)
-        location_code = location_details["country_location_id"]
-        # ExportLocationTree.__codes_to_dhis2_ids[location_code] = id
-
-        child_locations = location["nodes"]
-        __populate_child_locations(id, child_locations)
-
-
-def __create_new_dhis2_organisation(location_details, dhis2_parent_id):
-    name = location_details["name"]
-    country_location_id = location_details["country_location_id"]
-    # skip if organisation with given code already exists
-    dhis2_resp = get("{}organisationUnits?filter=code:eq:{}".format(dhis2_api_url, country_location_id),
-                     headers=dhis2_headers)
-    dhis2_organisation = dhis2_resp.json().get("organisationUnits", [])
-    if dhis2_organisation:
-        logger.info("Location %s with code %s already exists in dhis2.", name, country_location_id)
-        return dhis2_organisation[0]["id"]
-
-    uid = dhis2_ids.pop()
-    if location_details["start_date"]:
-        opening_date = datetime.strptime(location_details["start_date"], "%Y-%m-%dT%H:%M:%S").strftime("%Y-%m-%d")
-    else:
-        opening_date = "1970-01-01"
-    json_dict = {
-        "id": uid,
-        "name": name,
-        "shortName": name,
-        "code": country_location_id,
-        "openingDate": opening_date,
-        "parent": {"id": dhis2_parent_id}
-    }
-    payload = json.dumps(json_dict)
-    response = post("{}organisationUnits".format(dhis2_api_url), headers=dhis2_headers, data=payload)
-    logger.info("Created location %s with response %d", name, response.status_code)
-    logger.info(response.text)
-    return uid
 
 @dhis2_export.route("/formFields", methods=['POST'])
 @auth.authorise()
@@ -173,7 +104,6 @@ def __update_dhis2_program(field_names, form_name):
             set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
         program_payload["organisationUnits"] = [{"id": x} for x in organisations]
         payload_json = json.dumps(program_payload)
-        # TODO: IDSchemes doesn't seem to work here
         req = put("{}/programs/{}".format(dhis2_api_url, program_id), data=payload_json, headers=dhis2_headers)
         logger.info("Updated program %s (id:%s) with status %d", form_name, program_id, req.status_code)
 
@@ -186,13 +116,11 @@ def __update_dhis2_program(field_names, form_name):
             set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
         program_payload["organisationUnits"] = [{"id": x} for x in organisations]
         payload_json = json.dumps(program_payload)
-        # TODO: IDSchemes doesn't seem to work here
         req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created program %s (id:%s) with status %d", form_name, program_id, req.status_code)
     # Update data elements
     data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{code}")}} for code in
                          field_names]
-    # Update data elements
     stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, form_name),
                  headers=dhis2_headers).json()
     stage_payload = {
@@ -242,7 +170,6 @@ def __update_dhis2_dataset(field_names, form_name):
             set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
         dataset_payload["organisationUnits"] = [{"id": x} for x in organisations]
         payload_json = json.dumps(dataset_payload)
-        # TODO: IDSchemes doesn't seem to work here
         req = put("{}/dataSets/{}".format(dhis2_api_url, dataset_id), data=payload_json, headers=dhis2_headers)
         logger.info("Updated data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
 
@@ -255,7 +182,6 @@ def __update_dhis2_dataset(field_names, form_name):
             set(old_organisation_ids) | set(get_all_operational_clinics_as_dhis2_ids()))
         dataset_payload["organisationUnits"] = [{"id": x} for x in organisations]
         payload_json = json.dumps(dataset_payload)
-        # TODO: IDSchemes doesn't seem to work here
         req = post("{}/dataSets".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
 
