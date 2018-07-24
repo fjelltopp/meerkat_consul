@@ -21,25 +21,7 @@ dhis2_headers = dhis2_config["headers"]
 
 dhis2_ids = NewIdsProvider(dhis2_api_url, dhis2_headers)
 
-# TODO: This needs to be read from the country config
-form_export_config = {
-    "new_som_case": {
-        "exportName": "HOQM Case Form",
-        "exportType": "event"
-    },
-    "som_case": {
-        "exportName": "HOQM Legacy Case Form",
-        "exportType": "event"
-    },
-    "som_register": {
-        "exportName": "HOQM Legacy Daily Registry",
-        "exportType": "data_set"
-    },
-    "new_som_register": {
-        "exportName": "HOQM Daily Registry",
-        "exportType": "data_set"
-    }
-}
+form_export_config = app.config['FORM_EXPORT_CONFIG']
 
 dhis2_export = Blueprint('export', __name__, url_prefix='/dhis2/export')
 

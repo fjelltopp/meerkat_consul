@@ -8,15 +8,6 @@ class Config(object):
 
     COUNTRY_LOCATION_ID = 1
 
-    DHIS2_CONFIG = {
-        "url": "http://172.17.0.1:8085",
-        "apiResource": "/api/27",
-        "credentials": ('senyoni', 'admin'),
-        "headers": {
-            "Content-Type": "application/json",
-            "Authorization": "Basic c2VueW9uaTphZG1pbg=="
-        }
-    }
 
 
 class Production(Config):
