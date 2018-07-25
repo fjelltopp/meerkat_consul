@@ -7,8 +7,7 @@ from flask import Flask
 
 app = Flask(__name__)
 app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
-app.config.from_envvar('MEERKAT_CONSUL_SETTINGS')
-
+app.config.from_pyfile(os.getenv('MEERKAT_CONSUL_SETTINGS'), silent=True)
 logger = logging.getLogger("meerkat_consul")
 if not logger.handlers:
     logging_format = app.config['LOGGING_FORMAT']

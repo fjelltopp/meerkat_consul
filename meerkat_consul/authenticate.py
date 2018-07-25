@@ -32,19 +32,12 @@ def get_token():
     consul_auth_token_ = authenticate(username=CONSUL_AUTH_USERNAME,
                                       password=CONSUL_AUTH_PASSWORD,
                                       current_token=consul_auth_token_)
+    logging.info("Got token from auth: %s", consul_auth_token_)
     return consul_auth_token_
 
 
-def refresh_auth_token(f):
-    global headers
+def meerkat_headers():
     if not app.config['TESTING']:
-        headers = {'Authorization': JWT_HEADER_PREFIX + get_token()}
+        return {'Authorization': JWT_HEADER_PREFIX + get_token()}
     else:
-        headers = {'Authorization': JWT_HEADER_PREFIX + 'TESTING'}
-
-    return f
-
-if not app.config['TESTING']:
-    headers = {'Authorization': JWT_HEADER_PREFIX + get_token()}
-else:
-    headers = {'Authorization': JWT_HEADER_PREFIX + 'TESTING'}
+        return {'Authorization': JWT_HEADER_PREFIX + 'TESTING'}
