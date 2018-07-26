@@ -262,6 +262,9 @@ def submissions():
             data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
                            case['data'].items()]
             country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
+            if not country_location_id:
+                logger.error("Failed to get country location id for device %s", case_data['deviceid'])
+                continue
             event_payload = {
                 'event': event_id,
                 'program': Dhis2CodesToIdsCache.get_program_id(program),
