@@ -1,3 +1,5 @@
+import os
+
 import uuid
 from concurrent.futures import ThreadPoolExecutor
 from functools import wraps
@@ -74,7 +76,8 @@ def __check_if_response_is_ok(response):
 
 
 tasks = {}
-executor = ThreadPoolExecutor(max_workers=10)
+BACKGROUND_THREAD_COUNT = os.environ.get("BACKGROUND_THREAD_COUNT", 20)
+executor = ThreadPoolExecutor(max_workers=BACKGROUND_THREAD_COUNT)
 
 def async(f):
     """
