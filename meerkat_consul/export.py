@@ -245,6 +245,7 @@ def submissions():
     try:
         json_request = json.loads(reqparse.request.get_json())
     except JSONDecodeError:
+        logger.error("Failed to decode JSON body")
         abort(400, messages="Unable to parse posted JSON")
     form_name = json_request["formId"]
     if form_name not in form_export_config:
@@ -259,8 +260,12 @@ def submissions():
             date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
             _uuid = case['data'].get('meta/instanceID')[-11:]
             event_id = uuid_to_dhis2_uid(_uuid)
-            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
-                           case['data'].items()]
+            try:
+                data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
+                               case['data'].items()]
+            except ValueError:
+                logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
+                continue
             country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
             if not country_location_id:
                 logger.error("Failed to get country location id for device %s", case_data['deviceid'])
@@ -282,12 +287,15 @@ def submissions():
             data_entry = message['Body']
             data_entry_content = data_entry['data']
             form_name = data_entry['formId']
-            if form_name != 'new_som_register':
-                abort(501, messages="Not supported")
             date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
             period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
-            data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
-                           data_entry['data'].items()]
+            _uuid = data_entry['data'].get('meta/instanceID')[-11:]
+            try:
+                data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
+                               data_entry['data'].items()]
+            except ValueError:
+                logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
+                continue
             country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
             data_set_payload = {
                 'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
@@ -299,6 +307,8 @@ def submissions():
             payload_array.append(data_set_payload)
         data_sets_payload = {"data_entries": payload_array}
         post_data_set(data_sets_payload)
+    else:
+        return jsonify({"message": f"Export for form {form_name} with type {export_type} nod defined."})
     return jsonify({"message": "Sending submission batch finished successfully"}), 202
 
 
