@@ -37,16 +37,14 @@ def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
         abort(500)
 
 
-@dhis2_export.route("/formFields", methods=['POST'])
-@auth.authorise()
 def export_form_fields():
-    forms = requests.get("{}/export/forms".format(api_url), headers=meerkat_headers()).json()
+    forms = app.config['FORM_DEFINITIONS'] or __get_forms_from_meerkat_api()
     logger.info(f"Forms: {forms}")
 
     for form_name, export_config in form_export_config.items():
         field_names = forms.get(form_name)
         if not field_names:
-            abort(500, message=f"Can't find fields for form {form_name}")
+            raise EnvironmentError(msg_=f"Can't find fields for form {form_name}")
         export_type = export_config["exportType"]
         if export_type == "event":
             logger.debug("Event form %s found", form_name)
@@ -56,9 +54,11 @@ def export_form_fields():
             __update_dhis2_dataset(field_names, form_name)
         else:
             msg_ = f"Unsupported exportType {export_type} for {form_name}"
-            abort(500, message=msg_)
+            raise EnvironmentError(msg_=msg_)
 
-    return jsonify({"message": "Exporting form metadata finished successfully"})
+
+def __get_forms_from_meerkat_api():
+    return requests.get("{}/export/forms".format(api_url), headers=meerkat_headers()).json()
 
 
 def __update_dhis2_program(field_names, form_name):
@@ -107,7 +107,7 @@ def __update_dhis2_program(field_names, form_name):
                  headers=dhis2_headers).json()
     stage_payload = {
         "name": display_name,
-        "code": transform_to_dhis2_code(dhis2_code),
+        "code": dhis2_code,
         "program": {
             "id": program_id
         },
