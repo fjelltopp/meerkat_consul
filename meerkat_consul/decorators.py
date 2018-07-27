@@ -70,13 +70,14 @@ def __check_if_response_is_ok(response):
         logger.error("Request failed with code %d.", response.status_code)
         try:
             logger.error(response.json().get("message"), stack_info=True)
+            logger.debug(response.text)
         except JSONDecodeError:
             logger.error(response.text, stack_info=True)
     return response
 
 
 tasks = {}
-BACKGROUND_THREAD_COUNT = os.environ.get("BACKGROUND_THREAD_COUNT", 20)
+BACKGROUND_THREAD_COUNT = int(os.environ.get("BACKGROUND_THREAD_COUNT", "20"))
 executor = ThreadPoolExecutor(max_workers=BACKGROUND_THREAD_COUNT)
 
 def async(f):

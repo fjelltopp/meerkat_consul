@@ -1,5 +1,6 @@
 import logging
 import os
+from json.decoder import JSONDecodeError
 
 import backoff as backoff
 import requests
@@ -26,18 +27,23 @@ if not logger.handlers:
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
+from meerkat_consul.authenticate import meerkat_headers
 
 @backoff.on_predicate(backoff.expo, max_tries=8, max_value=30)
 @backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_tries=8, max_value=30)
+@backoff.on_exception(backoff.expo, JSONDecodeError, max_tries=10, max_value=45)
 def wait_for_api():
+    requests.get("{}/locations".format(api_url), headers=meerkat_headers()).json()
     return requests.get(api_url).text
 
 
 wait_for_api()
 
-from meerkat_consul.export import dhis2_export
+from meerkat_consul.export import dhis2_export, export_form_fields
+
 app.register_blueprint(dhis2_export)
 
+export_form_fields()
 
 @app.route('/')
 def root():
