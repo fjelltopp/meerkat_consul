@@ -29,9 +29,9 @@ api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
 from meerkat_consul.authenticate import meerkat_headers
 
-@backoff.on_predicate(backoff.expo, max_tries=10, max_value=45)
-@backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_tries=10, max_value=45)
-@backoff.on_exception(backoff.expo, JSONDecodeError, max_tries=10, max_value=45)
+@backoff.on_predicate(backoff.expo, max_tries=20, max_value=45)
+@backoff.on_exception(backoff.expo, requests.exceptions.RequestException, max_tries=20, max_value=45)
+@backoff.on_exception(backoff.expo, JSONDecodeError, max_tries=20, max_value=45)
 def wait_for_api_init():
     requests.get("{}/locations".format(api_url), headers=meerkat_headers()).json()
     return requests.get(api_url).text
@@ -39,8 +39,8 @@ def wait_for_api_init():
 
 @backoff.on_predicate(backoff.expo,
                       lambda x: x != 'WHO',
-                      max_tries=10,
-                      max_value=30)
+                      max_tries=20,
+                      max_value=45)
 def wait_for_api_start():
     return requests.get(api_url, headers=meerkat_headers()).text
 
