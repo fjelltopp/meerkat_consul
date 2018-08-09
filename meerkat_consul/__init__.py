@@ -37,6 +37,7 @@ def wait_for_api_init():
     return requests.get(api_url).text
 
 
+@backoff.on_exception(backoff.expo, requests.exceptions.ConnectionError, max_tries=20, max_value=45)
 @backoff.on_predicate(backoff.expo,
                       lambda x: x != 'WHO',
                       max_tries=20,
