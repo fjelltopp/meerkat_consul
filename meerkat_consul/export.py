@@ -317,7 +317,7 @@ def post_events(events_payload):
     event_res = post("{}/events?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url), headers=dhis2_headers,
                      data=json.dumps(events_payload))
     logger.info("Send batch of events with status: %d", event_res.status_code)
-    logger.debug(event_res.json().get('message'))
+    logger.debug("Message: %s", event_res.json().get('message'))
 
 
 @async
