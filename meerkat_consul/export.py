@@ -62,6 +62,7 @@ def __get_forms_from_meerkat_api():
 
 
 def __update_dhis2_program(field_names, form_name):
+    _create_data_elements(field_names, data_elements_type="TRACKER")
     for field_name in field_names:
         if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
             __update_data_elements(field_name)
@@ -167,10 +168,7 @@ def __update_dhis2_dataset(field_names, form_name):
         req = post("{}/dataSets".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
 
-    # Create data elements
-    for field_name in field_names:
-        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name, "AGGREGATE"):
-            __update_data_elements(field_name, "AGGREGATE")
+    _create_data_elements(field_names, data_elements_type="AGGREGATE")
 
     # Connect data elements to data set
     data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{name}")}} for name in
@@ -184,6 +182,12 @@ def __update_dhis2_dataset(field_names, form_name):
     res = put("{}/dataSets/{}".format(dhis2_api_url, dataset_id), data=payload_json,
               headers=dhis2_headers)
     logger.info("Updated data elements for data set %s (id: %s) with status %d", form_name, dataset_id, res.status_code)
+
+
+def _create_data_elements(field_names, data_elements_type):
+    for field_name in field_names:
+        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name, data_elements_type):
+            __update_data_elements(field_name, data_elements_type)
 
 
 def get_all_operational_clinics_as_dhis2_ids():
