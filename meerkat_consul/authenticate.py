@@ -24,7 +24,7 @@ def retry_message(i):
                       max_tries=8,
                       max_value=30)
 @backoff.on_predicate(backoff.expo,
-                      lambda x: x == '',
+                      lambda x: x == '' or not x,
                       max_tries=10,
                       max_value=30)
 def get_token():
