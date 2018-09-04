@@ -38,20 +38,20 @@ def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
 
 
 def export_form_fields():
-    forms = app.config['FORM_DEFINITIONS'] or __get_forms_from_meerkat_api()
-    logger.info(f"Forms: {forms}")
+    form_configs = app.config['FORM_DEFINITIONS'] or __get_forms_from_meerkat_api()
+    logger.info(f"Forms: {form_configs}")
 
     for form_name, export_config in form_export_config.items():
-        field_names = forms.get(form_name)
-        if not field_names:
+        form_config = form_configs.get(form_name)
+        if not form_config:
             raise EnvironmentError(msg_=f"Can't find fields for form {form_name}")
         export_type = export_config["exportType"]
         if export_type == "event":
             logger.debug("Event form %s found", form_name)
-            __update_dhis2_program(field_names, form_name)
+            __update_dhis2_program(form_config, form_name)
         elif export_type == "data_set":
             logger.debug("Data set form %s found", form_name)
-            __update_dhis2_dataset(field_names, form_name)
+            __update_dhis2_dataset(form_config, form_name)
         else:
             msg_ = f"Unsupported exportType {export_type} for {form_name}"
             raise EnvironmentError(msg_=msg_)
@@ -61,10 +61,8 @@ def __get_forms_from_meerkat_api():
     return requests.get("{}/export/forms".format(api_url), headers=meerkat_headers()).json()
 
 
-def __update_dhis2_program(field_names, form_name):
-    for field_name in field_names:
-        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name):
-            __update_data_elements(field_name)
+def __update_dhis2_program(form_config, form_name):
+    _create_data_elements(form_config, data_elements_type="TRACKER")
     dhis2_code = transform_to_dhis2_code(form_name)
     rv = get("{}/programs?filter=code:eq:{}".format(dhis2_api_url, dhis2_code), headers=dhis2_headers)
     programs = rv.json().get('programs', [])
@@ -101,8 +99,8 @@ def __update_dhis2_program(field_names, form_name):
         req = post("{}/programs".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created program %s (id:%s) with status %d", dhis2_code, program_id, req.status_code)
     # Update data elements
-    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{code}")}} for code in
-                         field_names]
+    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{field_config['name']}")}} for field_config in
+                         form_config]
     stages = get("{}/programStages?filter=code:eq:{}".format(dhis2_api_url, dhis2_code),
                  headers=dhis2_headers).json()
     stage_payload = {
@@ -127,7 +125,7 @@ def __update_dhis2_program(field_names, form_name):
         logger.info("Created stage for program %s with status %d", dhis2_code, res.status_code)
 
 
-def __update_dhis2_dataset(field_names, form_name):
+def __update_dhis2_dataset(form_config, form_name):
     dhis2_code = transform_to_dhis2_code(form_name)
     rv = get("{}/dataSets?filter=code:eq:{}".format(dhis2_api_url, dhis2_code), headers=dhis2_headers)
     datasets = rv.json().get('dataSets', [])
@@ -167,14 +165,11 @@ def __update_dhis2_dataset(field_names, form_name):
         req = post("{}/dataSets".format(dhis2_api_url), data=payload_json, headers=dhis2_headers)
         logger.info("Created data set %s (id:%s) with status %d", form_name, dataset_id, req.status_code)
 
-    # Create data elements
-    for field_name in field_names:
-        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name, "AGGREGATE"):
-            __update_data_elements(field_name, "AGGREGATE")
+    _create_data_elements(form_config, data_elements_type="AGGREGATE")
 
     # Connect data elements to data set
-    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{name}")}} for name in
-                         field_names]
+    data_element_keys = [{"dataElement": {"id": Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{field_config['name']}")}} for field_config in
+                         form_config]
 
     logger.info("Found %d relevant data elements", len(data_element_keys))
 
@@ -186,6 +181,14 @@ def __update_dhis2_dataset(field_names, form_name):
     logger.info("Updated data elements for data set %s (id: %s) with status %d", form_name, dataset_id, res.status_code)
 
 
+def _create_data_elements(form_config, data_elements_type):
+    for field_config in form_config:
+        field_name = field_config['name']
+        field_type = field_config['type']
+        if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name, data_elements_type):
+            __update_data_elements(field_name, field_type, data_elements_type)
+
+
 def get_all_operational_clinics_as_dhis2_ids():
     locations = requests.get("{}/locations".format(api_url), headers=meerkat_headers()).json()
     for location in locations.values():
@@ -193,7 +196,7 @@ def get_all_operational_clinics_as_dhis2_ids():
             yield Dhis2CodesToIdsCache.get_organisation_id(location.get('country_location_id'))
 
 
-def __update_data_elements(key, domain_type="TRACKER"):
+def __update_data_elements(key, field_type='TEXY', domain_type="TRACKER"):
     id = dhis2_ids.pop()
 
     name_ = f"HOQM {key}"
@@ -201,7 +204,7 @@ def __update_data_elements(key, domain_type="TRACKER"):
         'id': id,
         'code': transform_to_dhis2_code(f"{domain_type}_{key}"),
         'domainType': domain_type,
-        'valueType': 'TEXT'
+        'valueType': field_type
     }
 
     short_name_postfix = key[-47:]
