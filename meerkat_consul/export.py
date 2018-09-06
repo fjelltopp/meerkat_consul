@@ -44,7 +44,7 @@ def export_form_fields():
     for form_name, export_config in form_export_config.items():
         form_config = form_configs.get(form_name)
         if not form_config:
-            raise EnvironmentError(msg_=f"Can't find fields for form {form_name}")
+            raise ValueError(f"Can't find fields for form {form_name}")
         export_type = export_config["exportType"]
         if export_type == "event":
             logger.debug("Event form %s found", form_name)
@@ -54,7 +54,7 @@ def export_form_fields():
             __update_dhis2_dataset(form_config, form_name)
         else:
             msg_ = f"Unsupported exportType {export_type} for {form_name}"
-            raise EnvironmentError(msg_=msg_)
+            raise ValueError(msg_)
 
 
 def __get_forms_from_meerkat_api():
@@ -188,7 +188,7 @@ def _create_data_elements(form_config, data_elements_type):
         if not Dhis2CodesToIdsCache.has_data_element_with_code(field_name, data_elements_type):
             __update_data_elements(field_name, field_type, data_elements_type)
 
-
+@backoff.on_exception(backoff.expo, json.decoder.JSONDecodeError, max_tries=5, max_value=45, base=5)
 def get_all_operational_clinics_as_dhis2_ids():
     locations = requests.get("{}/locations".format(api_url), headers=meerkat_headers()).json()
     for location in locations.values():
@@ -296,10 +296,11 @@ def submissions():
             try:
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                                data_entry['data'].items()]
+                country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
             except ValueError:
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
+                logger.exception("Exception details:")
                 continue
-            country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
             data_set_payload = {
                 'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
                 'completeDate': date,
@@ -355,6 +356,8 @@ class MeerkatCache():
             url = "{}/{}/{}".format(api_url, resource_name, deviceid)
             req = requests.get(url)
             country_location_id = req.json().get('country_location_id')
+            if not country_location_id:
+                raise ValueError(f"Failed to get country location id for device: {deviceid}")
             cache[deviceid] = country_location_id
         return cache.get(deviceid)
 
