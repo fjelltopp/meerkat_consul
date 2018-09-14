@@ -257,17 +257,18 @@ def submissions():
     export_type = form_export_config[form_name].get("exportType")
     if export_type == "event":
         for message in json_request['Messages']:
-            case = message['Body']
-            case_data = case['data']
-            program = case['formId']
-            date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
-            _uuid = case['data'].get('meta/instanceID')[-11:]
-            event_id = uuid_to_dhis2_uid(_uuid)
             try:
+                case = message['Body']
+                case_data = case['data']
+                program = case['formId']
+                date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
+                _uuid = case['data'].get('meta/instanceID')[-11:]
+                event_id = uuid_to_dhis2_uid(_uuid)
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
                                case['data'].items()]
-            except ValueError:
+            except (TypeError, ValueError):
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
+                logger.exception("Exception details:")
                 continue
             country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
             if not country_location_id:
@@ -287,25 +288,27 @@ def submissions():
         post_events(events_payload)
     elif export_type == "data_set":
         for message in json_request['Messages']:
-            data_entry = message['Body']
-            data_entry_content = data_entry['data']
-            form_name = data_entry['formId']
-            date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
-            period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
-            _uuid = data_entry['data'].get('meta/instanceID')[-11:]
             try:
+                data_entry = message['Body']
+                data_entry_content = data_entry['data']
+                form_name = data_entry['formId']
+                _uuid = data_entry['data'].get('meta/instanceID')[-11:]
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                                data_entry['data'].items()]
                 country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
-            except ValueError:
+                date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
+                period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
+                data_set_id = Dhis2CodesToIdsCache.get_data_set_id(form_name)
+                organisation_id = Dhis2CodesToIdsCache.get_organisation_id(country_location_id)
+            except (ValueError, TypeError):
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
                 logger.exception("Exception details:")
                 continue
             data_set_payload = {
-                'dataSet': Dhis2CodesToIdsCache.get_data_set_id(form_name),
+                'dataSet': data_set_id,
                 'completeDate': date,
                 'period': period,
-                'orgUnit': Dhis2CodesToIdsCache.get_organisation_id(country_location_id),
+                'orgUnit': organisation_id,
                 'dataValues': data_values
             }
             payload_array.append(data_set_payload)
