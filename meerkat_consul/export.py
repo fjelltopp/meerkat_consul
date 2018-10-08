@@ -39,8 +39,7 @@ def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
 
 def export_form_fields():
     form_configs = app.config['FORM_DEFINITIONS'] or __get_forms_from_meerkat_api()
-    logger.info(f"Forms: {form_configs}")
-
+    logger.info("Starting export of form metadata.")
     for form_name, export_config in form_export_config.items():
         form_config = form_configs.get(form_name)
         if not form_config:
@@ -55,6 +54,7 @@ def export_form_fields():
         else:
             msg_ = f"Unsupported exportType {export_type} for {form_name}"
             raise ValueError(msg_)
+    logger.info("Finished export of form metadata.")
 
 
 def __get_forms_from_meerkat_api():
