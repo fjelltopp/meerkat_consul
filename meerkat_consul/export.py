@@ -39,8 +39,7 @@ def __abort_if_more_than_one(dhis2_country_details, dhis2_organisation_code):
 
 def export_form_fields():
     form_configs = app.config['FORM_DEFINITIONS'] or __get_forms_from_meerkat_api()
-    logger.info(f"Forms: {form_configs}")
-
+    logger.info("Starting export of form metadata.")
     for form_name, export_config in form_export_config.items():
         form_config = form_configs.get(form_name)
         if not form_config:
@@ -55,6 +54,7 @@ def export_form_fields():
         else:
             msg_ = f"Unsupported exportType {export_type} for {form_name}"
             raise ValueError(msg_)
+    logger.info("Finished export of form metadata.")
 
 
 def __get_forms_from_meerkat_api():
@@ -252,8 +252,9 @@ def submissions():
         abort(400, messages="Unable to parse posted JSON")
     form_name = json_request["formId"]
     if form_name not in form_export_config:
-        #TODO: Handle this with 4xx http error
-        return jsonify({"message": f"Form {form_name} is not supported."}), 202
+        msg = f"Form {form_name} is not supported."
+        logger.warning(msg)
+        return jsonify({"message": msg}), 404
     export_type = form_export_config[form_name].get("exportType")
     if export_type == "event":
         for message in json_request['Messages']:
@@ -315,7 +316,9 @@ def submissions():
         data_sets_payload = {"data_entries": payload_array}
         post_data_set(data_sets_payload)
     else:
-        return jsonify({"message": f"Export for form {form_name} with type {export_type} nod defined."})
+        msg = f"Export for form {form_name} with type {export_type} nod defined."
+        logger.error(msg)
+        return jsonify({"message": msg}), 404
     return jsonify({"message": "Sending submission batch finished successfully"}), 202
 
 
