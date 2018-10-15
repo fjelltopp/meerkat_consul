@@ -59,13 +59,15 @@ from meerkat_consul.export import dhis2_export, export_form_fields
 try:
     export_form_fields()
     app.register_blueprint(dhis2_export)
-except ValueError:
+    enabled_ = True
+except (ValueError, requests.exceptions.ConnectionError):
     logger.error("Failed to export initial form metadata to DHIS2.")
     logger.error("Consul won't work properly.")
+    enabled_ = False
 
 @app.route('/')
 def root():
-    return '{"name":"meerkat_consul"}'
+    return f"{{'name':'meerkat_consul', 'enabled':'{enabled_}'}}"
 
 
 if __name__ == '__main__':
