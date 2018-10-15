@@ -15,7 +15,7 @@ consul_auth_token_ = ''
 
 
 def retry_message(i):
-    logger.info("Failed to authenticate. Retrying in " + str(i))
+    logger.debug("Failed to authenticate. Retrying in " + str(i))
 
 @backoff.on_exception(backoff.expo,
                       requests.exceptions.RequestException,
@@ -31,7 +31,7 @@ def get_token():
     consul_auth_token_ = authenticate(username=CONSUL_AUTH_USERNAME,
                                       password=CONSUL_AUTH_PASSWORD,
                                       current_token=consul_auth_token_)
-    logger.info("Got token from auth: %s", consul_auth_token_)
+    logger.debug("Got token from auth: %s", consul_auth_token_)
     return consul_auth_token_
 
 
