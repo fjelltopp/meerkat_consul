@@ -1,10 +1,9 @@
-import logging
 import os
 
 import backoff
 import requests
 
-from meerkat_consul import app
+from meerkat_consul import app, logger
 from meerkat_libs import authenticate
 
 filename = os.environ.get('MEERKAT_AUTH_SETTINGS')
@@ -16,7 +15,7 @@ consul_auth_token_ = ''
 
 
 def retry_message(i):
-    logging.info("Failed to authenticate. Retrying in " + str(i))
+    logger.info("Failed to authenticate. Retrying in " + str(i))
 
 @backoff.on_exception(backoff.expo,
                       requests.exceptions.RequestException,
@@ -25,14 +24,14 @@ def retry_message(i):
                       max_value=30)
 @backoff.on_predicate(backoff.expo,
                       lambda x: x == '' or not x,
-                      max_tries=10,
+                      max_tries=13,
                       max_value=30)
 def get_token():
     global consul_auth_token_
     consul_auth_token_ = authenticate(username=CONSUL_AUTH_USERNAME,
                                       password=CONSUL_AUTH_PASSWORD,
                                       current_token=consul_auth_token_)
-    logging.info("Got token from auth: %s", consul_auth_token_)
+    logger.info("Got token from auth: %s", consul_auth_token_)
     return consul_auth_token_
 
 

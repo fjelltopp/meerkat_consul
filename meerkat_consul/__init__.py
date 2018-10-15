@@ -9,8 +9,9 @@ from flask import Flask
 app = Flask(__name__)
 app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
 app.config.from_pyfile(os.getenv('MEERKAT_CONSUL_SETTINGS'), silent=True)
-logger = logging.getLogger("meerkat_consul")
-if not logger.handlers:
+LOGGING_INITIALIZED = False
+if not LOGGING_INITIALIZED:
+    logger = logging.getLogger("meerkat_consul")
     logging_format = app.config['LOGGING_FORMAT']
     logging_level_ = app.config['LOGGING_LEVEL']
     handler = logging.StreamHandler()
@@ -19,11 +20,14 @@ if not logger.handlers:
     level = logging.getLevelName(logging_level_)
 
     logger.setLevel(level)
-    logger.addHandler(handler)
+    if not logger.handlers:
+        logger.addHandler(handler)
+    logger.propagate = 0
 
     backoff_logger = logging.getLogger('backoff')
     backoff_logger.setLevel(logging_level_)
     backoff_logger.addHandler(handler)
+    LOGGING_INITIALIZED = True
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
@@ -52,9 +56,12 @@ wait_for_api_init()
 
 from meerkat_consul.export import dhis2_export, export_form_fields
 
-app.register_blueprint(dhis2_export)
-
-export_form_fields()
+try:
+    export_form_fields()
+    app.register_blueprint(dhis2_export)
+except ValueError:
+    logger.error("Failed to export initial form metadata to DHIS2.")
+    logger.error("Consul won't work properly.")
 
 @app.route('/')
 def root():
