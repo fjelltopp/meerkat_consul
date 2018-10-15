@@ -4,7 +4,7 @@ class Config(object):
     PRODUCTION = False
 
     LOGGING_LEVEL = "ERROR"
-    LOGGING_FORMAT = '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    LOGGING_FORMAT = '%(asctime)s - %(levelname)-7s - %(module)s:%(filename)s:%(lineno)d - %(message)s'
 
     COUNTRY_LOCATION_ID = 1
 
