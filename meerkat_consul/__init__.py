@@ -9,25 +9,23 @@ from flask import Flask
 app = Flask(__name__)
 app.config.from_object(os.getenv('CONFIG_OBJECT', 'config.Development'))
 app.config.from_pyfile(os.getenv('MEERKAT_CONSUL_SETTINGS'), silent=True)
-LOGGING_INITIALIZED = False
-if not LOGGING_INITIALIZED:
-    logger = logging.getLogger("meerkat_consul")
-    logging_format = app.config['LOGGING_FORMAT']
-    logging_level_ = app.config['LOGGING_LEVEL']
-    handler = logging.StreamHandler()
-    formatter = logging.Formatter(logging_format)
-    handler.setFormatter(formatter)
-    level = logging.getLevelName(logging_level_)
 
-    logger.setLevel(level)
-    if not logger.handlers:
-        logger.addHandler(handler)
-    logger.propagate = 0
+logger = logging.getLogger("meerkat_consul")
+logging_format = app.config['LOGGING_FORMAT']
+logging_level_ = app.config['LOGGING_LEVEL']
+handler = logging.StreamHandler()
+formatter = logging.Formatter(logging_format)
+handler.setFormatter(formatter)
+level = logging.getLevelName(logging_level_)
 
-    backoff_logger = logging.getLogger('backoff')
-    backoff_logger.setLevel(logging_level_)
-    backoff_logger.addHandler(handler)
-    LOGGING_INITIALIZED = True
+logger.setLevel(level)
+if not logger.handlers:
+    logger.addHandler(handler)
+logger.propagate = 0
+
+backoff_logger = logging.getLogger('backoff')
+backoff_logger.setLevel(logging_level_)
+backoff_logger.addHandler(handler)
 
 api_url = os.environ.get('MEERKAT_API_URL', 'http://nginx/api')
 
@@ -59,13 +57,15 @@ from meerkat_consul.export import dhis2_export, export_form_fields
 try:
     export_form_fields()
     app.register_blueprint(dhis2_export)
-except ValueError:
+    enabled_ = True
+except (ValueError, requests.exceptions.ConnectionError):
     logger.error("Failed to export initial form metadata to DHIS2.")
     logger.error("Consul won't work properly.")
+    enabled_ = False
 
 @app.route('/')
 def root():
-    return '{"name":"meerkat_consul"}'
+    return f"{{'name':'meerkat_consul', 'enabled':'{enabled_}'}}"
 
 
 if __name__ == '__main__':
