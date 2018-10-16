@@ -293,17 +293,17 @@ def submissions():
     elif export_type == "data_set":
         for message in json_request['Messages']:
             try:
+                country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
+            except MissingCountryLocationIdError as e:
+                logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
+                continue
+            try:
                 data_entry = message['Body']
                 data_entry_content = data_entry['data']
                 form_name = data_entry['formId']
                 _uuid = data_entry['data'].get('meta/instanceID')[-11:]
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                                data_entry['data'].items()]
-                try:
-                    country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
-                except MissingCountryLocationIdError as e:
-                    logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
-                    continue
                 date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
                 period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
                 data_set_id = Dhis2CodesToIdsCache.get_data_set_id(form_name)
