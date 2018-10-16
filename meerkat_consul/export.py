@@ -343,7 +343,7 @@ def post_data_set(data_sets_payload):
         data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
                             headers=dhis2_headers, data=json.dumps(data_set))
         logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
-        logger.debug(data_set_res.json().get('message'))
+        logger.debug(f"With message: {data_set_res.json().get('message')}")
 
 
 def uuid_to_dhis2_uid(uuid):
