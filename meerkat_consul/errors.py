@@ -1,0 +1,2 @@
+class MissingCountryLocationIdError(ValueError):
+    pass

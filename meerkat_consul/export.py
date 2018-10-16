@@ -1,4 +1,5 @@
 import json
+import logging
 from collections import defaultdict
 from json import JSONDecodeError
 
@@ -13,6 +14,7 @@ from meerkat_consul.auth_client import auth
 from meerkat_consul.authenticate import meerkat_headers
 from meerkat_consul.decorators import get, post, put, async
 from meerkat_consul.dhis2 import NewIdsProvider, transform_to_dhis2_code
+from meerkat_consul.errors import MissingCountryLocationIdError
 
 __codes_to_ids = {}
 dhis2_config = app.config['DHIS2_CONFIG']
@@ -271,9 +273,10 @@ def submissions():
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
                 logger.exception("Exception details:")
                 continue
-            country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
-            if not country_location_id:
-                logger.error("Failed to get country location id for device %s", case_data['deviceid'])
+            try:
+                country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
+            except MissingCountryLocationIdError as e:
+                logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
                 continue
             event_payload = {
                 'event': event_id,
@@ -290,13 +293,17 @@ def submissions():
     elif export_type == "data_set":
         for message in json_request['Messages']:
             try:
+                country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
+            except MissingCountryLocationIdError as e:
+                logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
+                continue
+            try:
                 data_entry = message['Body']
                 data_entry_content = data_entry['data']
                 form_name = data_entry['formId']
                 _uuid = data_entry['data'].get('meta/instanceID')[-11:]
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
                                data_entry['data'].items()]
-                country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
                 date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
                 period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
                 data_set_id = Dhis2CodesToIdsCache.get_data_set_id(form_name)
@@ -336,7 +343,7 @@ def post_data_set(data_sets_payload):
         data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
                             headers=dhis2_headers, data=json.dumps(data_set))
         logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
-        logger.debug(data_set_res.json().get('message'))
+        logger.debug(f"With message: {data_set_res.json().get('message')}")
 
 
 def uuid_to_dhis2_uid(uuid):
@@ -363,7 +370,7 @@ class MeerkatCache():
             req = requests.get(url)
             country_location_id = req.json().get('country_location_id')
             if not country_location_id:
-                raise ValueError(f"Failed to get country location id for device: {deviceid}")
+                raise MissingCountryLocationIdError(f"Failed to get country location id for device: {deviceid}")
             cache[deviceid] = country_location_id
         return cache.get(deviceid)
 
