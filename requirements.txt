@@ -3,3 +3,4 @@ Jinja2
 flask-restful
 nose
 requests
+backoff
