@@ -264,17 +264,22 @@ def submissions():
                 case = message['Body']
                 case_data = case['data']
                 program = case['formId']
+                _uuid = case_data.get('meta/instanceID', 'Unknown')[-11:]
+            except (TypeError, KeyError):
+                logger.error("Failed to parse message for form %s", form_name)
+                logger.debug("Message: %s", message)
+                logger.exception("Exception details:")
+                continue
+            try:
                 date = meerkat_to_dhis2_date_format(case_data['SubmissionDate'])
-                _uuid = case['data'].get('meta/instanceID')[-11:]
                 event_id = uuid_to_dhis2_uid(_uuid)
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
                                case['data'].items()]
+                country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
             except (TypeError, ValueError):
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
                 logger.exception("Exception details:")
                 continue
-            try:
-                country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
             except MissingCountryLocationIdError as e:
                 logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
                 continue
@@ -295,21 +300,27 @@ def submissions():
             try:
                 data_entry = message['Body']
                 data_entry_content = data_entry['data']
-                country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
                 form_name = data_entry['formId']
-                _uuid = data_entry['data'].get('meta/instanceID')[-11:]
+                _uuid = data_entry_content.get('meta/instanceID')[-11:]
+            except (TypeError, KeyError):
+                logger.error("Failed to parse message for form %s", form_name)
+                logger.debug("Message: %s", message)
+                logger.exception("Exception details:")
+                continue
+            try:
+                country_location_id = MeerkatCache.get_location_from_deviceid(data_entry_content['deviceid'])
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"AGGREGATE_{i}"), 'value': v} for i, v in
-                               data_entry['data'].items()]
+                               data_entry_content.items()]
                 date = meerkat_to_dhis2_date_format(data_entry_content['SubmissionDate'])
                 period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
                 data_set_id = Dhis2CodesToIdsCache.get_data_set_id(form_name)
                 organisation_id = Dhis2CodesToIdsCache.get_organisation_id(country_location_id)
-            except MissingCountryLocationIdError as e:
-                logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
-                continue
             except (ValueError, TypeError):
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
                 logger.exception("Exception details:")
+                continue
+            except MissingCountryLocationIdError as e:
+                logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
                 continue
             data_set_payload = {
                 'dataSet': data_set_id,
