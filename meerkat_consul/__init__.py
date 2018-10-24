@@ -60,7 +60,7 @@ try:
     enabled_ = True
 except (ValueError, requests.exceptions.ConnectionError):
     logger.error("Failed to export initial form metadata to DHIS2.")
-    logger.error("Consul won't work properly.")
+    logger.error("Consul won't work properly.", exec_info=True)
     enabled_ = False
 
 @app.route('/')
