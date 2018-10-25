@@ -265,7 +265,7 @@ def submissions():
                 case_data = case['data']
                 program = case['formId']
                 _uuid = case_data.get('meta/instanceID', 'Unknown')[-11:]
-            except (TypeError, KeyError):
+            except (TypeError, KeyError, AttributeError):
                 logger.error("Failed to parse message for form %s", form_name)
                 logger.debug("Message: %s", message)
                 logger.exception("Exception details:")
@@ -302,7 +302,7 @@ def submissions():
                 data_entry_content = data_entry['data']
                 form_name = data_entry['formId']
                 _uuid = data_entry_content.get('meta/instanceID')[-11:]
-            except (TypeError, KeyError):
+            except (TypeError, KeyError, AttributeError):
                 logger.error("Failed to parse message for form %s", form_name)
                 logger.debug("Message: %s", message)
                 logger.exception("Exception details:")
