@@ -276,12 +276,12 @@ def submissions():
                 data_values = [{'dataElement': Dhis2CodesToIdsCache.get_data_element_id(f"TRACKER_{i}"), 'value': v} for i, v in
                                case['data'].items()]
                 country_location_id = MeerkatCache.get_location_from_deviceid(case_data['deviceid'])
-            except (TypeError, ValueError):
-                logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
-                logger.exception("Exception details:")
-                continue
             except MissingCountryLocationIdError as e:
                 logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
+                continue
+            except (TypeError, ValueError):
+                logger.warning("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
+                logger.exception("Exception details:")
                 continue
             event_payload = {
                 'event': event_id,
@@ -315,12 +315,12 @@ def submissions():
                 period = meerkat_to_dhis2_period_date_format(data_entry_content['SubmissionDate'], form_name)
                 data_set_id = Dhis2CodesToIdsCache.get_data_set_id(form_name)
                 organisation_id = Dhis2CodesToIdsCache.get_organisation_id(country_location_id)
+            except MissingCountryLocationIdError as e:
+                logger.warning(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
+                continue
             except (ValueError, TypeError):
                 logger.error("Failed to prepare data elements for uuid: %s in form %s", _uuid, form_name)
                 logger.exception("Exception details:")
-                continue
-            except MissingCountryLocationIdError as e:
-                logger.error(e, exc_info=logger.getEffectiveLevel() == logging.DEBUG)
                 continue
             data_set_payload = {
                 'dataSet': data_set_id,
@@ -353,7 +353,9 @@ def post_data_set(data_sets_payload):
         data_set_res = post("{}/dataValueSets?importStrategy=CREATE_AND_UPDATE".format(dhis2_api_url),
                             headers=dhis2_headers, data=json.dumps(data_set))
         logger.info("Send batch of data entries with status: %d", data_set_res.status_code)
-        logger.debug(f"With message: {data_set_res.json().get('message')}")
+        msg_ = data_set_res.json().get('message')
+        if msg_:
+            logger.debug(f"With message: {msg_}")
 
 
 def uuid_to_dhis2_uid(uuid):
