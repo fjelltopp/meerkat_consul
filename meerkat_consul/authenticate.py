@@ -37,6 +37,9 @@ def get_token():
 
 def meerkat_headers():
     if not app.config['TESTING']:
-        return {'Authorization': JWT_HEADER_PREFIX + get_token()}
+        token = get_token()
+        if token == None:
+            token = "NONE"
+        return {'Authorization': JWT_HEADER_PREFIX + token}
     else:
         return {'Authorization': JWT_HEADER_PREFIX + 'TESTING'}
