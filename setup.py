@@ -1,13 +1,14 @@
 import uuid
 from setuptools import setup, find_packages
-from pip.req import parse_requirements
+import pathlib
+import pkg_resources
 
-# parse_requirements() returns generator of pip.req.InstallRequirement objects
-install_reqs = parse_requirements("requirements.txt", session=uuid.uuid1())
-
-# reqs is a list of requirement
-# e.g. ['django==1.5.1', 'mezzanine==1.4.6']
-reqs = [str(ir.req) for ir in install_reqs]
+with pathlib.Path('requirements.txt').open() as requirements_txt:
+    reqs = [
+        str(requirement)
+        for requirement
+        in pkg_resources.parse_requirements(requirements_txt)
+    ]
 
 setup(
     name='Meerkat Consul',
